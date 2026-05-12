@@ -6,7 +6,7 @@ import leantermination.Termination.AcyclicIntegerProgram
 set_option linter.unusedVariables false
 set_option linter.style.longLine false
 
-
+-- @todo make corss platform
 def runZ3 (smt : String) : IO String := do
   -- write the smt string to a temp file
   let path := "/tmp/query.smt"

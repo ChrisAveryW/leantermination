@@ -90,7 +90,7 @@ def isLocation (s : String) : Bool :=
     -- rest must start with "(->Int"
     else if !(afterName.startsWith "(->int") then false
     else
-      -- grab what's between "->Int" and the closing "))"
+      -- get what between "->Int" and the closing "))"
       let afterArrow := afterName.drop 3  -- drop "(->"
       -- strip the closing "))" from the end
       let inner := afterArrow.dropEnd 2
