@@ -1,0 +1,35 @@
+(format LCTRS)
+(theory Ints)
+
+(fun L (-> Int Int Int Int Int Int Int Int Int))
+(fun M (-> Int Int Int Int Int Int Int Int Int))
+
+(entrypoint L)
+
+(rule
+  (L A B C D E F G H)
+  (M A B C D E F G H))
+
+(rule
+  (M A B C D E F G H)
+  (M
+    (+ A (* B C))
+    (- B (* C D))
+    (+ C (* D E))
+    (- D (* E F))
+    (+ E (* F G))
+    (- F (* G H))
+    (+ G (* H A))
+    (- H (* A B)))
+  :guard (and
+           (distinct A B)
+           (distinct C D)
+           (distinct E F)
+           (distinct G H)
+           (< (+ A B C D E F G H) 1000000000)
+           (> (+ A B C D E F G H) -1000000000)))
+
+(rule
+  (M A B C D E F G H)
+  (L A B C D E F G H)
+  :guard (= (+ A B C D E F G H) 0))

@@ -1,0 +1,43 @@
+(format LCTRS)
+(theory Ints)
+
+(fun root  (-> Int Int Int Int))
+(fun a     (-> Int Int Int Int))
+(fun b     (-> Int Int Int Int))
+(fun merge (-> Int Int Int Int))
+(fun tail  (-> Int Int Int Int))
+(fun exit  (-> Int Int Int Int))
+
+(entrypoint root)
+
+(rule
+  (root X Y Z)
+  (a X Y Z)
+  :guard (>= X 0))
+
+(rule
+  (root X Y Z)
+  (b (- 0 X) Y Z)
+  :guard (< X 0))
+
+(rule
+  (a X Y Z)
+  (merge (* X X) (+ Y 1) Z))
+
+(rule
+  (b X Y Z)
+  (merge (* 2 X) (- Y 1) Z))
+
+(rule
+  (merge X Y Z)
+  (tail (+ X Y) (- X Y) (* X Z))
+  :guard (distinct Z 0))
+
+(rule
+  (merge X Y Z)
+  (tail X Y (+ X Y))
+  :guard (= Z 0))
+
+(rule
+  (tail X Y Z)
+  (exit X Y Z))

@@ -1,0 +1,5 @@
+(format LCTRS)
+(theory Ints)
+(fun loop (-> Int Int))
+(entrypoint loop)
+(rule (loop X) (loop (+ X 1)))

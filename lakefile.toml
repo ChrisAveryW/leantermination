@@ -1,0 +1,31 @@
+name = "leantermination"
+version = "0.1.0"
+keywords = ["math"]
+defaultTargets = ["leantermination"]
+
+[leanOptions]
+pp.unicode.fun = true # pretty-prints `fun a ↦ b`
+relaxedAutoImplicit = false
+weak.linter.mathlibStandardSet = true
+maxSynthPendingDepth = 3
+
+[[require]]
+name = "mathlib"
+scope = "leanprover-community"
+rev = "v4.29.0"
+
+[[require]]
+name = "CertifyingDatalog"
+git = "https://github.com/knowsys/CertifyingDatalog.git"
+rev = "main"
+
+[[lean_lib]]
+name = "leantermination"
+
+[[lean_exe]]
+name = "main"
+root = "Main"
+
+[[lean_exe]]
+name = "check"
+root = "leantermination.Toolchain.CheckAcyclic"

@@ -1,0 +1,38 @@
+(format LCTRS)
+(theory Ints)
+
+(fun stage0 (-> Int Int Int))
+(fun stage1 (-> Int Int Int))
+(fun stage2 (-> Int Int Int))
+(fun stage3 (-> Int Int Int))
+(fun done   (-> Int Int Int))
+
+(entrypoint stage0)
+
+(rule
+  (stage0 A B)
+  (stage1 (+ A) (- B)))
+
+(rule
+  (stage1 A B)
+  (stage2 (+ A B) (- A B))
+  :guard (>= A B))
+
+(rule
+  (stage1 A B)
+  (stage2 (+ B A) (- B A))
+  :guard (< A B))
+
+(rule
+  (stage2 S D)
+  (stage3 (* 2 S) (* 3 D)))
+
+(rule
+  (stage3 X Y)
+  (done X Y)
+  :guard (distinct X Y))
+
+(rule
+  (stage3 X Y)
+  (done (+ X 1) Y)
+  :guard (= X Y))

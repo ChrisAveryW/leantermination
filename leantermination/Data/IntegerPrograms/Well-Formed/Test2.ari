@@ -1,0 +1,16 @@
+(format LCTRS)
+(theory Ints)
+(fun l_start (-> Int Int Int))
+(fun l_loop  (-> Int Int Int))
+(fun l_end   (-> Int Int Int))
+(entrypoint l_start)
+(rule (l_start N STEPS) (l_loop N STEPS))
+(rule(l_loop N STEPS)(l_loop (- N 2) (+ STEPS 1)) :guard (and (> N 1) (= (+ N 2) 0)))
+(rule
+  (l_loop N STEPS)
+  (l_loop (+ (* 3 N) 1) (+ STEPS 1))
+  :guard (and (> N 1) (= (+ N 2) 1)))
+(rule
+  (l_loop N STEPS)
+  (l_end N STEPS)
+  :guard (<= N 1))

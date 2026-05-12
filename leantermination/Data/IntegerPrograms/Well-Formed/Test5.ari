@@ -1,0 +1,22 @@
+(format LCTRS)
+(theory   Ints)
+
+(fun  init    (-> Int))                                
+(fun  body    (-> Int Int Int))
+(fun  halt    (-> Int Int Int))
+
+(entrypoint init)
+
+(rule (init) (body 0 1))                                
+
+(rule
+    (body  CurrentCounterValue   AccumulatedProduct)
+    (body  (+ CurrentCounterValue 1)
+           (* AccumulatedProduct (+ CurrentCounterValue 1)))
+    :guard (and (< CurrentCounterValue 10)
+                (not (= AccumulatedProduct 0))))
+
+(rule
+	(body N P)
+	(halt N P)
+	:guard (or (>= N 10) (= (+ P) 0)))
