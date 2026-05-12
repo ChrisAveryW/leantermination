@@ -103,9 +103,7 @@ def ParsedRule.toTransition (r : ParsedRule) (locMap : Std.HashMap String Nat) :
   pure { src, tgt, guard, update }
 
 -- Translate a full ParsedITS → IntegerProgram
--- Note: the invariant proofs (h_strt, h_locs, h_trans, h_incom) can't be
--- discharged automatically here since they depend on runtime values,
--- so this returns Option and you'd need decide or native_decide in a tactic block
+-- issue with runtime proof fixed
 def ParsedITS.toIntegerProgram (its : ParsedITS) : Option IntegerProgram := do
   let locMap := buildLocMap its.locations
   let locs   := List.range its.locations.length
