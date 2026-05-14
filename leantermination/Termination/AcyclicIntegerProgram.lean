@@ -26,6 +26,36 @@ def IntegerProgram.isAcyclic (ip : IntegerProgram) : Bool :=
 def IntegerProgram.isAcyclicUpToSelfLoops (ip : IntegerProgram) : Prop :=
   AcyclicUpToSelfLoops ip.toPGraph
 
+-- conversion proofs
+-- semantic and syntactic equivalence
+lemma SemanticPath.exists_syntactic {u : Nat} {v : Nat} {env : Env} {ip : IntegerProgram}
+  (p : SemanticPath ip env u v) : Nonempty (SyntacticPath ip u v) := by
+  exact ⟨p.toSyntactic⟩
+
+lemma SemanticPath.toSyntactic_length {ip : IntegerProgram} {env : Env} {u v : Nat}
+    (p : SemanticPath ip env u v) : p.toSyntactic.length = p.length := by
+  induction p with
+  | nil _ _ _           => rfl
+  | cons _ _ _ _ _ _ _ ih =>
+      simp [SemanticPath.toSyntactic, SyntacticPath.length, SemanticPath.length, ih]
+
+def SyntacticPath.toPPath {ip : IntegerProgram} {u v : Nat} :
+    SyntacticPath ip u v → PPath ip.toPGraph u v
+  | .nil u hu =>
+      PPath.nil u hu  -- ip.toPGraph.nodes = ip.locs, so hu works directly
+  | .cons t ht p =>
+      PPath.cons
+        (show (t.src, t.tgt) ∈ ip.toPGraph.edges from by
+          simp only [IntegerProgram.toPGraph, IntegerProgram.edgePairs, List.mem_map]
+          exact ⟨t, ht, rfl⟩)
+        p.toPPath
+
+lemma SyntacticPath.toPPath_length {ip : IntegerProgram} {u v : Nat}
+    (p : SyntacticPath ip u v) : p.toPPath.length = p.length := by
+  induction p with
+  | nil _ _ => rfl
+  | cons _ _ _ ih =>
+      simp [SyntacticPath.toPPath, PPath.length, SyntacticPath.length, ih]
 
 -- soundness proofs
 theorem acyclic_impl_bounded_IP
@@ -36,6 +66,31 @@ theorem acyclic_impl_bounded_IP
   p.length < ip.locs.length :=
 by
   exact acyclic_impl_bounded_PPath ip.toPGraph hac p
+
+def IntegerProgram.Acyclic (ip : IntegerProgram) : Prop :=
+  PGraph.Acyclic ip.toPGraph
+
+
+theorem Acayclic_impl_Termination
+  (ip : IntegerProgram) :
+    ip.Acyclic → ip.Termination := by
+  unfold IntegerProgram.Acyclic IntegerProgram.Termination
+  intro h_acyc
+  refine ⟨ip.locs.length, ?_⟩
+  intro u e v p
+  -- semantic → syntactic
+  let s := p.toSyntactic
+  have h1 : s.length = p.length := SemanticPath.toSyntactic_length p
+  -- syntactic → PPath
+  let q := s.toPPath
+  have h2 : q.length = s.length := SyntacticPath.toPPath_length s
+  -- now h_acyc : PGraph.Acyclic ip.toPGraph, which is what the lemma wants
+  have hbound : q.length < ip.locs.length :=
+    acyclic_impl_bounded_IP ip h_acyc q
+  omega
+
+
+
 
 -- acyclicity soundness
 -- right now not complete! @TODO

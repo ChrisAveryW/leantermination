@@ -127,18 +127,38 @@ structure IntegerProgram where
   h_edges : ∀ t ∈ edges, t.src ∈ locs ∧ t.tgt ∈ locs
 deriving Repr, DecidableEq
 
-inductive IPPath (ip : IntegerProgram) : Nat → Nat → Type where
-     | nil  : (u : Nat) → u ∈ ip.locs → IPPath ip u u
-     | cons : {v : Nat} → (t : Transition) → t ∈ ip.edges →
-              IPPath ip t.tgt v → IPPath ip t.src v
+inductive SyntacticPath (ip : IntegerProgram) : Nat → Nat → Type where
+  | nil (u : Nat) (h : u ∈ ip.locs) : SyntacticPath ip u u
+  | cons {v : Nat} (t : Transition) (h : t ∈ ip.edges)
+         (p : SyntacticPath ip t.tgt v) : SyntacticPath ip t.src v
 
-def IPPath.length {ip : IntegerProgram} {u v : Nat} :
-    IPPath ip u v → Nat
+def SyntacticPath.length {ip : IntegerProgram} {u v : Nat} :
+    SyntacticPath ip u v → Nat
   | .nil _ _   => 0
   | .cons _ _ p => 1 + p.length
 
-def IntegerProgram.Acyclic (ip : IntegerProgram) : Prop :=
-  ∀ {u : Nat} (p : IPPath ip u u), p.length = 0
+inductive SemanticPath (ip : IntegerProgram) : Env → Nat → Nat → Type where
+  | nil (u : Nat) (env : Env) (h : u ∈ ip.locs) : SemanticPath ip env u u
+  | cons {v : Nat} (env : Env) (t : Transition) (h : t ∈ ip.edges)
+         (hguard : Constraint.eval t.guard env = some true)
+         (env' : Env) (hupdate : Update.all t.update env = some env')
+         (p : SemanticPath ip env' t.tgt v) : SemanticPath ip env t.src v
+
+def SemanticPath.length {ip : IntegerProgram} {env : Env} {u v : Nat} :
+    SemanticPath ip env u v → Nat
+  | .nil _ _ _          => 0
+  | .cons _ _ _ _ _ _ p => 1 + p.length
+
+def SemanticPath.toSyntactic {ip : IntegerProgram} {env : Env} {u v : Nat} :
+    SemanticPath ip env u v → SyntacticPath ip u v
+  | .nil u _ h          => .nil u h
+  | .cons _ t h _ _ _ p => .cons t h p.toSyntactic
+
+def IntegerProgram.Termination (ip : IntegerProgram) : Prop :=
+  ∃ (n : Nat), ∀ {u v : Nat} (e : Env) (p : SemanticPath ip e u v), p.length ≤ n
+
+
+
 
 
 /-
