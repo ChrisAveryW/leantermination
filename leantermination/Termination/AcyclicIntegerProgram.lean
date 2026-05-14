@@ -1,125 +1,171 @@
-import leantermination.Termination.AcyclicGraph
+import Mathlib.Data.List.Basic
+import Mathlib.Data.List.Nodup
+import Mathlib.Data.Finset.Basic
 import leantermination.Datastructures.IntegerProgram
+import leantermination
+import CertifyingDatalog.GraphValidation.Dfs
 
+-- Semantic Path to Syntactic Paths
 
-def IntegerProgram.edgePairs (ip : IntegerProgram) : List (Nat × Nat) :=
-  ip.edges.map (fun t => (t.src, t.tgt))
+private lemma SemanticPath.exists_syntactic {u v : Nat} {env : Env} {ip : IntegerProgram}
+    (p : SemanticPath ip env u v) : Nonempty (SyntacticPath ip u v) :=
+  ⟨p.toSyntactic⟩
 
-def IntegerProgram.toPGraph (ip : IntegerProgram) : PGraph :=
-  {
-    nodes := ip.locs
-    edges := ip.edgePairs
-    h_mem := by
-      intro e he
-      simp only [edgePairs] at he
-      simp only [List.mem_map] at he
-      rcases he with ⟨t, ht, rfl⟩
-      have h := ip.h_edges t ht
-      exact h
-  }
-
--- checks if an IntegerProgram is Acyclic
-def IntegerProgram.isAcyclic (ip : IntegerProgram) : Bool :=
-  PGraph.isAcyclicDFS ip.toPGraph
-
--- non acyclic-proof function
-def IntegerProgram.isAcyclicUpToSelfLoops (ip : IntegerProgram) : Prop :=
-  AcyclicUpToSelfLoops ip.toPGraph
-
--- conversion proofs
--- semantic and syntactic equivalence
-lemma SemanticPath.exists_syntactic {u : Nat} {v : Nat} {env : Env} {ip : IntegerProgram}
-  (p : SemanticPath ip env u v) : Nonempty (SyntacticPath ip u v) := by
-  exact ⟨p.toSyntactic⟩
-
-lemma SemanticPath.toSyntactic_length {ip : IntegerProgram} {env : Env} {u v : Nat}
+private lemma SemanticPath.toSyntactic_length {ip : IntegerProgram} {env : Env} {u v : Nat}
     (p : SemanticPath ip env u v) : p.toSyntactic.length = p.length := by
   induction p with
   | nil _ _ _           => rfl
   | cons _ _ _ _ _ _ _ ih =>
       simp [SemanticPath.toSyntactic, SyntacticPath.length, SemanticPath.length, ih]
 
-def SyntacticPath.toPPath {ip : IntegerProgram} {u v : Nat} :
-    SyntacticPath ip u v → PPath ip.toPGraph u v
-  | .nil u hu =>
-      PPath.nil u hu  -- ip.toPGraph.nodes = ip.locs, so hu works directly
-  | .cons t ht p =>
-      PPath.cons
-        (show (t.src, t.tgt) ∈ ip.toPGraph.edges from by
-          simp only [IntegerProgram.toPGraph, IntegerProgram.edgePairs, List.mem_map]
-          exact ⟨t, ht, rfl⟩)
-        p.toPPath
 
-lemma SyntacticPath.toPPath_length {ip : IntegerProgram} {u v : Nat}
-    (p : SyntacticPath ip u v) : p.toPPath.length = p.length := by
+-- Helper functions and Lemma for
+
+def SyntacticPath.visited {ip : IntegerProgram} {u v : Nat} :
+    SyntacticPath ip u v → List Nat
+  | .nil u _    => [u]
+  | .cons t _ p => t.src :: p.visited
+
+private theorem SyntacticPath.visited_length {ip : IntegerProgram} {u v : Nat}
+    (p : SyntacticPath ip u v) : p.visited.length = p.length + 1 := by
   induction p with
-  | nil _ _ => rfl
-  | cons _ _ _ ih =>
-      simp [SyntacticPath.toPPath, PPath.length, SyntacticPath.length, ih]
+  | nil _ _       => simp [SyntacticPath.visited, SyntacticPath.length]
+  | cons _ _ _ ih => simp [SyntacticPath.visited, SyntacticPath.length, ih]; omega
 
--- soundness proofs
-theorem acyclic_impl_bounded_IP
-  (ip : IntegerProgram)
-  (hac : PGraph.Acyclic ip.toPGraph)
-  {u v : Nat}
-  (p : PPath ip.toPGraph u v) :
-  p.length < ip.locs.length :=
-by
-  exact acyclic_impl_bounded_PPath ip.toPGraph hac p
+private theorem SyntacticPath.visited_mem {ip : IntegerProgram} {u v : Nat}
+    (p : SyntacticPath ip u v) : ∀ x ∈ p.visited, x ∈ ip.locs := by
+  induction p with
+  | nil u hu =>
+      intro x hx
+      simp [SyntacticPath.visited] at hx
+      subst hx; exact hu
+  | cons t ht _ ih =>
+      intro x hx
+      simp only [SyntacticPath.visited, List.mem_cons] at hx
+      rcases hx with rfl | hx
+      · exact (ip.h_edges t ht).1
+      · exact ih x hx
 
-def IntegerProgram.Acyclic (ip : IntegerProgram) : Prop :=
-  PGraph.Acyclic ip.toPGraph
+private theorem SyntacticPath.visited_reachable {ip : IntegerProgram} {u v : Nat}
+    (p : SyntacticPath ip u v) : ∀ x ∈ p.visited, Nonempty (SyntacticPath ip u x) := by
+  induction p with
+  | nil u hu =>
+      intro x hx
+      simp only [SyntacticPath.visited, List.mem_singleton] at hx
+      rw [hx]
+      exact ⟨.nil u hu⟩
+  | cons t ht q ih =>
+      intro x hx
+      simp only [SyntacticPath.visited, List.mem_cons] at hx
+      rcases hx with rfl | hx
+      · exact ⟨.nil t.src (ip.h_edges t ht).1⟩
+      · obtain ⟨p'⟩ := ih x hx
+        exact ⟨.cons t ht p'⟩
 
+private theorem SyntacticPath.visited_nodup {ip : IntegerProgram}
+    (hac : IntegerProgram.Acyclic ip) {u v : Nat}
+    (p : SyntacticPath ip u v) : p.visited.Nodup := by
+  induction p with
+  | nil _ _ => exact List.nodup_singleton _
+  | cons t ht q ih =>
+      rw [SyntacticPath.visited, List.nodup_cons]
+      refine ⟨?_, ih⟩
+      intro hmem
+      obtain ⟨p'⟩ := q.visited_reachable _ hmem
+      have hcycle : (.cons t ht p' : SyntacticPath ip t.src t.src).length = 0 := hac _
+      simp only [SyntacticPath.length] at hcycle
+      omega
 
-theorem Acayclic_impl_Termination
-  (ip : IntegerProgram) :
-    ip.Acyclic → ip.Termination := by
-  unfold IntegerProgram.Acyclic IntegerProgram.Termination
-  intro h_acyc
-  refine ⟨ip.locs.length, ?_⟩
-  intro u e v p
-  -- semantic → syntactic
-  let s := p.toSyntactic
-  have h1 : s.length = p.length := SemanticPath.toSyntactic_length p
-  -- syntactic → PPath
-  let q := s.toPPath
-  have h2 : q.length = s.length := SyntacticPath.toPPath_length s
-  -- now h_acyc : PGraph.Acyclic ip.toPGraph, which is what the lemma wants
-  have hbound : q.length < ip.locs.length :=
-    acyclic_impl_bounded_IP ip h_acyc q
+private theorem nodup_sublist_length {α : Type*} {l ref : List α}
+    (hnd : l.Nodup) (hsub : ∀ x ∈ l, x ∈ ref) : l.length ≤ ref.length := by
+  classical
+  have h1 : l.length = l.toFinset.card := (List.toFinset_card_of_nodup hnd).symm
+  have h2 : l.toFinset ⊆ ref.toFinset := by
+    intro x hx
+    simp only [List.mem_toFinset] at *
+    exact hsub x hx
+  exact calc l.length = l.toFinset.card   := h1
+    _                 ≤ ref.toFinset.card := Finset.card_le_card h2
+    _                 ≤ ref.length        := List.toFinset_card_le ref
+
+private theorem acyclic_impl_bounded_SyntacticPath {ip : IntegerProgram}
+    (hac : IntegerProgram.Acyclic ip) {u v : Nat} (p : SyntacticPath ip u v) :
+    p.length < ip.locs.length := by
+  have hnd  := SyntacticPath.visited_nodup hac p
+  have hmem := SyntacticPath.visited_mem p
+  have hle  := nodup_sublist_length hnd hmem
+  rw [SyntacticPath.visited_length] at hle
   omega
 
 
+-- Main Acyclic theorem
+theorem Acayclic_impl_Termination (ip : IntegerProgram) :
+    IntegerProgram.Acyclic ip → IntegerProgram.Termination ip := by
+  intro h_acyc
+  unfold IntegerProgram.Termination
+  refine ⟨ip.locs.length, ?_⟩
+  intro u v e p
+  have h1 := SemanticPath.toSyntactic_length p
+  have h2 := acyclic_impl_bounded_SyntacticPath h_acyc p.toSyntactic
+  omega
 
 
--- acyclicity soundness
--- right now not complete! @TODO
+-- Selfloops
+def IntegerProgram.withoutSelfLoops (ip : IntegerProgram) : IntegerProgram :=
+  { locs   := ip.locs
+  , l₀     := ip.l₀
+  , edges  := ip.edges.filter (fun t => t.src ≠ t.tgt)
+  , h_edges := by
+      intro t ht
+      simp [List.mem_filter] at ht
+      exact ip.h_edges t ht.1 }
 
-private theorem transition_in_edgePairs
-    {ip : IntegerProgram} {t : Transition} (ht : t ∈ ip.edges) :
-    (t.src, t.tgt) ∈ ip.edgePairs := by
-  simp only [IntegerProgram.edgePairs, List.mem_map]
-  exact ⟨t, ht, rfl⟩
-
-private theorem edgePairs_gives_transition
-    {ip : IntegerProgram} {u v : Nat} (h : (u, v) ∈ ip.edgePairs) :
-    ∃ t ∈ ip.edges, t.src = u ∧ t.tgt = v := by
-  simp only [IntegerProgram.edgePairs, List.mem_map, Prod.mk.injEq] at h
-  obtain ⟨t, ht, hsrc, htgt⟩ := h
-  exact ⟨t, ht, hsrc, htgt⟩
-
-private def IPPath.toPPath {ip : IntegerProgram} :
-    ∀ {u v : Nat}, IPPath ip u v → PPath ip.toPGraph u v
-  | _, _, .nil u hu       => PPath.nil u (by
-      show u ∈ ip.toPGraph.nodes; exact hu)
-  | _, _, .cons t ht p_rest =>
-      PPath.cons
-        (show (t.src, t.tgt) ∈ ip.toPGraph.edges from transition_in_edgePairs ht)
-        p_rest.toPPath
+def IntegerProgram.AcyclicUpToSelfLoops (ip : IntegerProgram) : Prop :=
+  IntegerProgram.Acyclic ip.withoutSelfLoops
 
 
-private theorem IPPath.toPPath_length {ip : IntegerProgram} :
-    ∀ {u v : Nat} (p : IPPath ip u v), p.toPPath.length = p.length
-  | _, _, .nil _ _        => rfl
-  | _, _, .cons _ _ p_rest => by
-      simp [IPPath.toPPath, IPPath.length, PPath.length, IPPath.toPPath_length p_rest]
+-- Is Acyclic translation
+def IntegerProgram.toPreGraph (ip : IntegerProgram) : PreGraph Nat :=
+  ip.edges.foldl
+    (fun acc t => acc.add_vertex_with_predecessors t.tgt [t.src])
+    (PreGraph.from_vertices ip.locs)
+
+private theorem foldl_add_predecessors_complete
+    (init : PreGraph Nat) (edges : List Transition) (h : init.complete) :
+    (edges.foldl
+      (fun acc t => acc.add_vertex_with_predecessors t.tgt [t.src]) init).complete := by
+  induction edges generalizing init with
+  | nil        => exact h
+  | cons e es ih =>
+      simp only [List.foldl_cons]
+      exact ih _ (PreGraph.add_vertex_with_predecessors_still_complete init e.tgt [e.src] h)
+
+theorem IntegerProgram.toPreGraph_complete (ip : IntegerProgram) : ip.toPreGraph.complete :=
+  foldl_add_predecessors_complete _ _
+    (PreGraph.from_vertices_is_complete ip.locs)
+
+def IntegerProgram.toGraph (ip : IntegerProgram) : Graph Nat :=
+  ⟨ip.toPreGraph, ip.toPreGraph_complete⟩
+
+def IntegerProgram.isAcyclicDFS (ip : IntegerProgram) : Bool :=
+  match ip.toGraph.verify_via_dfs (fun _ => Except.ok ()) with
+  | Except.ok _    => true
+  | Except.error _ => false
+
+theorem IntegerProgram.isAcyclicDFS_iff (ip : IntegerProgram) :
+    ip.isAcyclicDFS = true ↔ ip.toGraph.isAcyclic := by
+  unfold IntegerProgram.isAcyclicDFS
+  constructor
+  · intro h
+    split at h
+    · rename_i heq
+      exact ((Graph.dfs_semantics _ _).mp heq).1
+    · simp at h
+  · intro h
+    have heq : ip.toGraph.verify_via_dfs (fun _ => Except.ok ()) = Except.ok () := by
+      rw [Graph.dfs_semantics]
+      exact ⟨h, fun _ _ => rfl⟩
+    simp [heq]
+
+def IntegerProgram.isAcyclic (ip : IntegerProgram) : Bool :=
+  ip.isAcyclicDFS
