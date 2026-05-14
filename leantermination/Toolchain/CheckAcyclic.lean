@@ -17,7 +17,7 @@ def runZ3 (smt : String) : IO String := do
   return out
 
 def main : IO Unit := do
-  let input ← IO.FS.readFile "leantermination/Data/IntegerPrograms/Acyclic/Test2.ari"
+  let input ← IO.FS.readFile "leantermination/Data/IntegerPrograms/Badly-Formed/Test3.ari"
   match parseITS input with
   | some its =>
     IO.println s!"The provided Integer Program is represented like this:"

@@ -26,18 +26,18 @@ def SyntacticPath.visited {ip : IntegerProgram} {u v : Nat} :
   | .nil u _    => [u]
   | .cons t _ p => t.src :: p.visited
 
-private theorem SyntacticPath.visited_length {ip : IntegerProgram} {u v : Nat}
+private lemma SyntacticPath.visited_length {ip : IntegerProgram} {u v : Nat}
     (p : SyntacticPath ip u v) : p.visited.length = p.length + 1 := by
   induction p with
   | nil _ _       => simp [SyntacticPath.visited, SyntacticPath.length]
   | cons _ _ _ ih => simp [SyntacticPath.visited, SyntacticPath.length, ih]; omega
 
-private theorem SyntacticPath.visited_mem {ip : IntegerProgram} {u v : Nat}
+private lemma SyntacticPath.visited_mem {ip : IntegerProgram} {u v : Nat}
     (p : SyntacticPath ip u v) : ∀ x ∈ p.visited, x ∈ ip.locs := by
   induction p with
   | nil u hu =>
       intro x hx
-      simp [SyntacticPath.visited] at hx
+      simp only [visited, List.mem_cons, List.not_mem_nil, or_false] at hx
       subst hx; exact hu
   | cons t ht _ ih =>
       intro x hx
@@ -46,7 +46,7 @@ private theorem SyntacticPath.visited_mem {ip : IntegerProgram} {u v : Nat}
       · exact (ip.h_edges t ht).1
       · exact ih x hx
 
-private theorem SyntacticPath.visited_reachable {ip : IntegerProgram} {u v : Nat}
+private lemma SyntacticPath.visited_reachable {ip : IntegerProgram} {u v : Nat}
     (p : SyntacticPath ip u v) : ∀ x ∈ p.visited, Nonempty (SyntacticPath ip u x) := by
   induction p with
   | nil u hu =>
@@ -62,7 +62,7 @@ private theorem SyntacticPath.visited_reachable {ip : IntegerProgram} {u v : Nat
       · obtain ⟨p'⟩ := ih x hx
         exact ⟨.cons t ht p'⟩
 
-private theorem SyntacticPath.visited_nodup {ip : IntegerProgram}
+private lemma SyntacticPath.visited_nodup {ip : IntegerProgram}
     (hac : IntegerProgram.Acyclic ip) {u v : Nat}
     (p : SyntacticPath ip u v) : p.visited.Nodup := by
   induction p with
@@ -76,7 +76,7 @@ private theorem SyntacticPath.visited_nodup {ip : IntegerProgram}
       simp only [SyntacticPath.length] at hcycle
       omega
 
-private theorem nodup_sublist_length {α : Type*} {l ref : List α}
+private lemma nodup_sublist_length {α : Type*} {l ref : List α}
     (hnd : l.Nodup) (hsub : ∀ x ∈ l, x ∈ ref) : l.length ≤ ref.length := by
   classical
   have h1 : l.length = l.toFinset.card := (List.toFinset_card_of_nodup hnd).symm
@@ -117,7 +117,8 @@ def IntegerProgram.withoutSelfLoops (ip : IntegerProgram) : IntegerProgram :=
   , edges  := ip.edges.filter (fun t => t.src ≠ t.tgt)
   , h_edges := by
       intro t ht
-      simp [List.mem_filter] at ht
+      simp only [ne_eq, decide_not, List.mem_filter, Bool.not_eq_eq_eq_not, Bool.not_true,
+        decide_eq_false_iff_not] at ht
       exact ip.h_edges t ht.1 }
 
 def IntegerProgram.AcyclicUpToSelfLoops (ip : IntegerProgram) : Prop :=

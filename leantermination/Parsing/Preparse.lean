@@ -23,8 +23,6 @@ structure ParsedITS where
   locations : List String
 deriving Repr
 
-
-
 -- Helper Functions
 def topLevelParens (s : String) : List String :=
   let chars := s.toList
