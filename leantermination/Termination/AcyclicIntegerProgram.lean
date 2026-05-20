@@ -103,10 +103,12 @@ theorem Acayclic_impl_Termination (ip : IntegerProgram) :
     IntegerProgram.Acyclic ip → IntegerProgram.Termination ip := by
   intro h_acyc
   unfold IntegerProgram.Termination
+  intro e
   refine ⟨ip.locs.length, ?_⟩
-  intro u v e p
+  intro u v p
   have h1 := SemanticPath.toSyntactic_length p
   have h2 := acyclic_impl_bounded_SyntacticPath h_acyc p.toSyntactic
+  rw [SemanticPath.toSyntactic_length] at h2
   omega
 
 

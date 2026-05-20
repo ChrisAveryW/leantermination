@@ -154,13 +154,11 @@ def SemanticPath.toSyntactic {ip : IntegerProgram} {env : Env} {u v : Nat} :
   | .nil u _ h          => .nil u h
   | .cons _ t h _ _ _ p => .cons t h p.toSyntactic
 
-def IntegerProgram.Termination (ip : IntegerProgram) : Prop :=
-  ∃ (n : Nat), ∀ {u v : Nat} (e : Env) (p : SemanticPath ip e u v), p.length ≤ n
-
 def IntegerProgram.Acyclic (ip : IntegerProgram) : Prop :=
   ∀ {u : Nat} (p : SyntacticPath ip u u), p.length = 0
 
-
+def IntegerProgram.Termination (ip : IntegerProgram) : Prop :=
+  ∀ (e : Env), ∃ (n : Nat), ∀ {u v : Nat} (p : SemanticPath ip e u v), p.length ≤ n
 
 /-
 -- Functions for Ineger Programs
