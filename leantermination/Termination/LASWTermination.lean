@@ -5,56 +5,16 @@ import Mathlib.Tactic.Linarith
 import Mathlib.Algebra.Order.Floor.Defs
 import Mathlib.Data.Rat.Floor
 import Mathlib.Algebra.Ring.Defs
---import Mathlib.Algebra.Order.Floor.Basic
 
-/-
-  LASW Termination via Farkas Witnesses
-  =====================================
-
-  This file scaffolds the soundness proof of the Podelski–Rybalchenko (2004)
-  algorithm: given a Farkas witness (λ₁, λ₂) satisfying constraints (1a)–(1d),
-  the corresponding LASW program terminates.
-
-  Pipeline (top-down, with the bottom layers being the most "paper-y"):
-
-    Layer 6 : termination_of_farkas_witness   -- top-level theorem (user-facing)
-    Layer 5 : path_length_bounded_by_ranking  -- generic well-foundedness
-    Layer 4 : rho_strict_decrease,            -- the two-case ranking function ρ
-              rho_lower_bound
-    Layer 3 : decrease_on_step,               -- THE PAPER'S CORE: Farkas calculation
-              bounded_on_loop_state
-    Layer 2 : RepresentsProgram,              -- encoding correctness
-              step_implies_matrix
-    Layer 1 : FarkasWitness                   -- data + constraints (1a)–(1d)
-
-  Suggested implementation order: 5 → 1 → 2 → 3 → 4 → 6.
-
-  NOTE: For simplicity, this scaffold treats a single transition / loop body of
-  the IntegerProgram. Extending to programs with multiple transitions or
-  locations requires either (a) a per-edge witness with a lexicographic /
-  disjoint-union argument, or (b) a single big witness combined via the
-  transition-invariants approach.
--/
-
-
-open scoped BigOperators
 
 namespace LASW
 
-/-! ## Layer 1: Farkas Witness Data -/
-
 /--
-A `FarkasWitness` packages the data and constraints needed to certify
-termination via the Podelski–Rybalchenko algorithm.
-
-* `n` is the number of program variables.
-* `m` is the number of inequalities in the matrix encoding `(A A')(x, x') ≤ b`.
-* `A`, `A'` are `m × n` matrices over `ℚ`.
-* `b : Fin m → ℚ` is the right-hand side vector.
-* `lambda₁`, `lambda₂` are nonnegative *row* vectors of length `m`.
-
-The five fields `h_nonneg₁`, `h_nonneg₂`, `h_1a`, `h_1b`, `h_1c`, `h_1d`
-correspond exactly to the algorithm's conditions on page 242 of the paper.
+ `n` is the number of program variables.
+ `m` is the number of inequalities in the matrix encoding `(A A')(x, x') ≤ b`.
+ `A`, `A'` are `m × n` matrices over `ℚ`.
+ `b : Fin m → ℚ` is the right-hand side vector.
+ `lambda₁`, `lambda₂` are nonnegative *row* vectors of length `m`.
 -/
 structure FarkasWitness (n m : ℕ) where
   A : Fin m → Fin n → ℚ
@@ -96,8 +56,6 @@ lemma delta_pos : 0 < w.delta := by
 end FarkasWitness
 
 
-/-! ## Layer 2: Encoding Correctness -/
-
 /--
 Convert an `Env` (a `List Int`) into a rational vector of length `n`.
 Indices past the list default to 0.
@@ -119,10 +77,6 @@ def SemanticStep (ip : IntegerProgram) (env env' : Env) : Prop :=
 Encoding correctness for a single transition: whenever `t` performs a step
 from `env` to `env'`, the matrix inequality `(A A')(env, env')ᵀ ≤ b` holds.
 
-This property is *about the encoding*, not about Farkas — it asserts that
-the matrices `A`, `A'`, `b` faithfully represent the syntactic guard and
-update of `t`. Discharging this is part of the trust boundary between the
-SMT pipeline and the verified core.
 -/
 def FarkasWitness.RepresentsTransition
     {n m : ℕ} (w : FarkasWitness n m) (t : Transition) : Prop :=
@@ -139,10 +93,8 @@ def FarkasWitness.RepresentsProgram
   ∀ t ∈ ip.edges, w.RepresentsTransition t
 
 /--
-**Translation lemma.** A single semantic step implies the matrix inequality.
+A single semantic step implies the matrix inequality.
 
-This is the bridge between the operational semantics of `IntegerProgram`
-and the algebraic matrix view used by the Farkas argument.
 -/
 lemma step_implies_matrix
     {n m : ℕ} {ip : IntegerProgram} {w : FarkasWitness n m}
@@ -161,20 +113,11 @@ lemma step_implies_matrix
   exact h_repr_t env env' hguard hupdate i
 
 
-/-! ## Layer 3: The Paper's Core (Theorem 1's Calculation) -/
-
 /--
-**Strict-decrease lemma — Theorem 1, decrease half.**
+Decrease Lemma
 
 The linear function `r · x` strictly decreases by at least `δ` on every step:
   `r · env' ≤ r · env - δ`.
-
-Proof outline (the paper's calculation):
-  1. From `step_implies_matrix`:  `A·env + A'·env' ≤ b`  (componentwise).
-  2. Multiply by `λ₂ ≥ 0` and sum: `λ₂·A·env + λ₂·A'·env' ≤ λ₂·b`.
-  3. By (1c):  `λ₂·A + λ₂·A' = 0`, so `λ₂·A = -λ₂·A' = -r`.
-  4. Substitute:  `-r·env + r·env' ≤ λ₂·b = -δ`.
-  5. Rearrange:   `r·env' ≤ r·env - δ`.
 -/
 lemma decrease_on_step
     {n m : ℕ} {ip : IntegerProgram} {w : FarkasWitness n m}
@@ -185,12 +128,10 @@ lemma decrease_on_step
   set x  : Fin n → ℚ := Env.toVec n env  with hx
   set x' : Fin n → ℚ := Env.toVec n env' with hx'
 
-  -- ---- Step 1: matrix inequality on every row ----
   have h_mat : ∀ i : Fin m,
       (∑ j, w.A i j * x j) + (∑ j, w.A' i j * x' j) ≤ w.b i :=
     step_implies_matrix h_repr h_step
 
-  -- ---- Step 2: nonneg-weighted sum over rows ----
   -- Multiply row i by λ₂(i) ≥ 0 and sum.
   have h_sum :
       (∑ i, w.lambda₂ i *
@@ -200,11 +141,7 @@ lemma decrease_on_step
     intro i _
     exact mul_le_mul_of_nonneg_left (h_mat i) (w.h_nonneg₂ i)
 
-  -- ---- Step 3: rearrange the LHS of h_sum ----
-  -- Goal: rewrite ∑ i, λ₂ i * (Σ_j A·x + Σ_j A'·x')
-  --       as (∑ j, (∑ i, λ₂ i * A i j) * x j) + (∑ j, (∑ i, λ₂ i * A' i j) * x' j)
-
-  -- First, distribute λ₂(i) over the inner addition:
+  -- distribute λ₂(i) over the inner addition:
   have h_dist : ∀ i,
       w.lambda₂ i * ((∑ j, w.A i j * x j) + (∑ j, w.A' i j * x' j))
       = (∑ j, w.lambda₂ i * (w.A i j * x j))
@@ -245,8 +182,6 @@ lemma decrease_on_step
     apply Finset.sum_congr rfl
     intro i _
     ring
-
-  -- ---- Step 4: identify (λ₂ A')(j) = r(j) and (λ₂ A)(j) = -r(j) ----
 
   -- λ₂ A' = r by definition of r
   have h_lam2A' : ∀ j, (∑ i, w.lambda₂ i * w.A' i j) = w.r j := by
@@ -313,18 +248,8 @@ lemma decrease_on_step
         --   * `mul_nonneg` (for `λ₂ i ≥ 0`)
 
 /--
-**Boundedness lemma — Theorem 1, boundedness half.**
-
 Any loop-eligible state `env` (one that admits a successor) satisfies
 `r · env ≥ δ₀`.
-
-Proof outline:
-  1. Let `env'` be the successor provided by `h_loop`.
-  2. From `step_implies_matrix`:  `A·env + A'·env' ≤ b`.
-  3. Multiply by `λ₁ ≥ 0`:  `λ₁·A·env + λ₁·A'·env' ≤ λ₁·b`.
-  4. By (1a): `λ₁·A' = 0`, killing the second term:  `λ₁·A·env ≤ λ₁·b`.
-  5. By (1b): `λ₁·A = λ₂·A`, and by (1c): `λ₂·A = -r`. So `λ₁·A = -r`.
-  6. Substitute:  `-r·env ≤ λ₁·b = -δ₀`, hence `r·env ≥ δ₀`.
 -/
 lemma bounded_on_loop_state
     {n m : ℕ} {ip : IntegerProgram} {w : FarkasWitness n m}
@@ -441,12 +366,10 @@ lemma bounded_on_loop_state
     have h_lam2A' : (∑ i, w.lambda₂ i * w.A' i j) = w.r j := rfl
     rw [hc_split, h_lam2A'] at hc
     linarith
-
   -- Combine: λ₁ A = -r  (column-wise)
   have h_lam1A : ∀ j, (∑ i, w.lambda₁ i * w.A i j) = -w.r j := by
     intro j
     rw [h_eq j, h_lam2A j]
-
   -- Rewrite h_zero's LHS using the swap, then identify the inner sum with -r.
   -- h_zero : ∑ i, ∑ j, λ₁ i * (A i j * x j) ≤ ∑ i, λ₁ i * b i
   rw [h_swap_A] at h_zero
@@ -481,19 +404,8 @@ lemma bounded_on_loop_state
   linarith
 
 
-/-! ## Layer 4: The Two-Case Ranking Function ρ -/
-
 /--
-The ranking function ρ from the figure on page 242 of the paper.
-
-* If `env` admits some successor, `ρ(env) := r · env`.
-* Otherwise, `ρ(env) := δ₀ - δ` (a constant floor strictly below `δ₀`).
-
-
-The ranking function ρ from the figure on page 242 of the paper.
-
-* If `env` admits some successor, `ρ(env) := r · env`.
-* Otherwise, `ρ(env) := δ₀ - δ` (a constant floor strictly below `δ₀`).
+The ranking function ρ from the paper
 -/
 noncomputable def FarkasWitness.rho
     {n m : ℕ} (w : FarkasWitness n m) (ip : IntegerProgram) (env : Env) : ℚ :=
@@ -505,9 +417,6 @@ noncomputable def FarkasWitness.rho
 
 /-
 ρ strictly decreases by `δ` on every step.
-
-Combines `decrease_on_step` (when `env'` is loop-eligible) with
-`bounded_on_loop_state` (when `env'` falls off the loop and ρ drops to floor).
 -/
 lemma rho_strict_decrease
     {n m : ℕ} {ip : IntegerProgram} {w : FarkasWitness n m}
@@ -555,17 +464,7 @@ lemma rho_lower_bound
     rw [if_neg h_env]
 
 
-
-/-! ## Layer 5: Generic Path-Length Bound (Well-Foundedness) -/
-
 /--
-**Generic well-foundedness lemma.** No Farkas, no LASW content — just the
-principle that a bounded-below, strictly-decreasing function bounds path length.
-
-If `ρ` strictly decreases by `δ > 0` on every step and is bounded below by `L`,
-then for any `SemanticPath p` from `env`:
-  `p.length * δ ≤ ρ(env) - L`.
-
 This lemma is reusable for any ranking-function-based termination method.
 -/
 lemma path_length_bounded_by_ranking
@@ -591,7 +490,7 @@ lemma path_length_bounded_by_ranking
       linarith [ih, h_dec]
 
 /--
-Convenience corollary: the path length as a natural number is bounded.
+the path length as a natural number is bounded.
 -/
 lemma path_length_le_bound
     (ip : IntegerProgram)
@@ -616,11 +515,9 @@ lemma path_length_le_bound
   exact_mod_cast this
 
 
-/-! ## Layer 6: The Top-Level Theorem -/
+
 
 /--
-**Soundness of the Podelski–Rybalchenko algorithm.**
-
 If a Farkas witness `w` represents `ip`, then `ip` terminates.
 -/
 theorem termination_of_farkas_witness
