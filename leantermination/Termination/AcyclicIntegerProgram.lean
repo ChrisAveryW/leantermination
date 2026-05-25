@@ -3,7 +3,7 @@ import Mathlib.Data.List.Nodup
 import Mathlib.Data.Finset.Basic
 import leantermination.Datastructures.IntegerProgram
 import leantermination
-import CertifyingDatalog.GraphValidation.Dfs
+--import CertifyingDatalog.GraphValidation.Dfs
 
 -- Semantic Path to Syntactic Paths
 
@@ -88,7 +88,7 @@ private lemma nodup_sublist_length {α : Type*} {l ref : List α}
     _                 ≤ ref.toFinset.card := Finset.card_le_card h2
     _                 ≤ ref.length        := List.toFinset_card_le ref
 
-private theorem acyclic_impl_bounded_SyntacticPath {ip : IntegerProgram}
+theorem acyclic_impl_bounded_SyntacticPath {ip : IntegerProgram}
     (hac : IntegerProgram.Acyclic ip) {u v : Nat} (p : SyntacticPath ip u v) :
     p.length < ip.locs.length := by
   have hnd  := SyntacticPath.visited_nodup hac p
@@ -111,22 +111,7 @@ theorem Acayclic_impl_Termination (ip : IntegerProgram) :
   rw [SemanticPath.toSyntactic_length] at h2
   omega
 
-
--- Selfloops
-def IntegerProgram.withoutSelfLoops (ip : IntegerProgram) : IntegerProgram :=
-  { locs   := ip.locs
-  , l₀     := ip.l₀
-  , edges  := ip.edges.filter (fun t => t.src ≠ t.tgt)
-  , h_edges := by
-      intro t ht
-      simp only [ne_eq, decide_not, List.mem_filter, Bool.not_eq_eq_eq_not, Bool.not_true,
-        decide_eq_false_iff_not] at ht
-      exact ip.h_edges t ht.1 }
-
-def IntegerProgram.AcyclicUpToSelfLoops (ip : IntegerProgram) : Prop :=
-  IntegerProgram.Acyclic ip.withoutSelfLoops
-
-
+/-
 -- Is Acyclic translation
 def IntegerProgram.toPreGraph (ip : IntegerProgram) : PreGraph Nat :=
   ip.edges.foldl
@@ -172,3 +157,4 @@ theorem IntegerProgram.isAcyclicDFS_iff (ip : IntegerProgram) :
 
 def IntegerProgram.isAcyclic (ip : IntegerProgram) : Bool :=
   ip.isAcyclicDFS
+-/
