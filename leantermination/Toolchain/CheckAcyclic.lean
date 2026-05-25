@@ -2,6 +2,7 @@ import leantermination.Parsing.ITSParse
 import leantermination.Parsing.Preparse
 import leantermination.Termination.termination_lasw
 import leantermination.Termination.AcyclicIntegerProgram
+import leantermination.Termination.Acyclic
 
 set_option linter.unusedVariables false
 set_option linter.style.longLine false
@@ -16,7 +17,7 @@ def runZ3 (smt : String) : IO String := do
     { cmd  := "z3", args := #[path] }
   return out
 
-def main : IO Unit := do
+def main_deprecated : IO Unit := do
   let input ← IO.FS.readFile "leantermination/Data/IntegerPrograms/Badly-Formed/Test3.ari"
   match parseITS input with
   | some its =>
@@ -25,4 +26,16 @@ def main : IO Unit := do
     IO.println (reprStr its)
     IO.println s!"------------------------------------------------------"
     IO.println s!"The provided Integer Program is {(if IntegerProgram.isAcyclic its then "acyclic, thus terminates" else "non-acyclic, thus termination cannot be proven.")}"
+  | none     => IO.println "Failed to parse ITS file"
+
+
+def main : IO Unit := do
+  let input ← IO.FS.readFile "leantermination/Data/IntegerPrograms/Well-Formed/Test2.ari"
+  match parseITS input with
+  | some its =>
+    IO.println s!"The provided Integer Program is represented like this:"
+    IO.println s!"------------------------------------------------------"
+    IO.println (reprStr its)
+    IO.println s!"------------------------------------------------------"
+    IO.println s!"The provided Integer Program is {(if IntegerProgram.IsAcyclic its then "acyclic, thus terminates" else "non-acyclic, thus termination cannot be proven.")}"
   | none     => IO.println "Failed to parse ITS file"
