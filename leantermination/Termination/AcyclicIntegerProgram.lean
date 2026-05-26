@@ -3,7 +3,7 @@ import Mathlib.Data.List.Nodup
 import Mathlib.Data.Finset.Basic
 import leantermination.Datastructures.IntegerProgram
 import leantermination
---import CertifyingDatalog.GraphValidation.Dfs
+
 
 -- Semantic Path to Syntactic Paths
 
@@ -110,51 +110,3 @@ theorem Acayclic_impl_Termination (ip : IntegerProgram) :
   have h2 := acyclic_impl_bounded_SyntacticPath h_acyc p.toSyntactic
   rw [SemanticPath.toSyntactic_length] at h2
   omega
-
-/-
--- Is Acyclic translation
-def IntegerProgram.toPreGraph (ip : IntegerProgram) : PreGraph Nat :=
-  ip.edges.foldl
-    (fun acc t => acc.add_vertex_with_predecessors t.tgt [t.src])
-    (PreGraph.from_vertices ip.locs)
-
-private theorem foldl_add_predecessors_complete
-    (init : PreGraph Nat) (edges : List Transition) (h : init.complete) :
-    (edges.foldl
-      (fun acc t => acc.add_vertex_with_predecessors t.tgt [t.src]) init).complete := by
-  induction edges generalizing init with
-  | nil        => exact h
-  | cons e es ih =>
-      simp only [List.foldl_cons]
-      exact ih _ (PreGraph.add_vertex_with_predecessors_still_complete init e.tgt [e.src] h)
-
-theorem IntegerProgram.toPreGraph_complete (ip : IntegerProgram) : ip.toPreGraph.complete :=
-  foldl_add_predecessors_complete _ _
-    (PreGraph.from_vertices_is_complete ip.locs)
-
-def IntegerProgram.toGraph (ip : IntegerProgram) : Graph Nat :=
-  ⟨ip.toPreGraph, ip.toPreGraph_complete⟩
-
-def IntegerProgram.isAcyclicDFS (ip : IntegerProgram) : Bool :=
-  match ip.toGraph.verify_via_dfs (fun _ => Except.ok ()) with
-  | Except.ok _    => true
-  | Except.error _ => false
-
-theorem IntegerProgram.isAcyclicDFS_iff (ip : IntegerProgram) :
-    ip.isAcyclicDFS = true ↔ ip.toGraph.isAcyclic := by
-  unfold IntegerProgram.isAcyclicDFS
-  constructor
-  · intro h
-    split at h
-    · rename_i heq
-      exact ((Graph.dfs_semantics _ _).mp heq).1
-    · simp at h
-  · intro h
-    have heq : ip.toGraph.verify_via_dfs (fun _ => Except.ok ()) = Except.ok () := by
-      rw [Graph.dfs_semantics]
-      exact ⟨h, fun _ _ => rfl⟩
-    simp [heq]
-
-def IntegerProgram.isAcyclic (ip : IntegerProgram) : Bool :=
-  ip.isAcyclicDFS
--/
