@@ -1,8 +1,6 @@
-import leantermination
 import leantermination.Parsing.ITSParse
 import leantermination.Parsing.Preparse
 import leantermination.Termination.termination_lasw
-
 set_option linter.unusedVariables false
 set_option linter.style.longLine false
 

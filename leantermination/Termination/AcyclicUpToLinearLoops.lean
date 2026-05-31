@@ -130,25 +130,65 @@ lemma skeleton_steps_bounded
   rw [h_locs] at h_bound
   omega
 
-/--
-Total self-loop steps bounded.
 
-IMPORTANT: this is stated to produce a bound `B` that may depend on the path `p`.
-For the main theorem we need `B` to be UNIFORM over all paths from a fixed `env`.
-To express that cleanly, we phrase it as: there is a single `B` (depending on
-`ip`, the witnesses, and the starting `env`) bounding self-loop steps of EVERY
-path from `env`. That is the form below.
--/
+
+/-- A self-loop run at a single location, transferred to the single-transition
+program `transition_to_ip t`, is bounded by that program's termination bound at
+the entry environment.
+
+PROOF SKETCH (remaining work):
+  1. `termination_of_farkas_witness w h_repr` gives
+        (ip.transition_to_ip t h_self h_edge).Termination,
+     i.e. for the entry env `env`, `∃ N, ∀ p, p.length ≤ N`.
+  2. Build a LENGTH-PRESERVING transfer
+        (p : SemanticPath ip env u v)  with  p.usesOnly t
+        ↦ SemanticPath (ip.transition_to_ip t h_self h_edge) env u v
+     by induction on `p`:
+       * `nil`  ↦ `nil` (note `u ∈ [t.src]` since `usesOnly`/`h_self` pin `u`);
+       * `cons` ↦ reuse the single edge `t`. Its guard/update obligations come
+         from `p`'s step (the `usesOnly` hypothesis forces the used edge to be
+         `t`); membership in the singleton program is `List.mem_singleton`.
+     Prove `transfer_length : (transfer p).length = p.length` alongside.
+  3. Instantiate Termination at `env`, get `N`, push back along the transfer. -/
+lemma selfloop_run_bounded
+    {ip : IntegerProgram} {t : Transition}
+    (h_self : t.src = t.tgt) (h_edge : t ∈ ip.edges)
+    {n m : ℕ} (w : LASW.FarkasWitness n m)
+    (h_repr : w.RepresentsProgram (ip.transition_to_ip t h_self h_edge))
+    (env : Env) :
+    ∃ N : Nat, ∀ {u v : Nat} (p : SemanticPath ip env u v),
+      SemanticPath.usesOnly t p → p.length ≤ N := by
+  sorry
+
+/-- Uniform self-loop step bound over ALL paths from a fixed `env`.
+
+PROOF SKETCH (remaining work):
+  Decompose any path from `env` into maximal blocks separated by skeleton edges.
+  There are at most `skeletonSteps + 1 ≤ ip.locs.length + 1` blocks
+  (`skeleton_steps_bounded`). Each block is a self-loop run at one location,
+  bounded by `selfloop_run_bounded` *for the env entering that block*.
+
+  The one real difficulty is UNIFORMITY: the entry env of block k depends on how
+  many self-loops fired in earlier blocks. But each block's length (hence its
+  exit env) is bounded, and there are ≤ |edges| skeleton transitions leaving it,
+  so the set of block-entry envs reachable from `env` within the skeleton budget
+  is FINITE. Then take
+        B := (ip.locs.length + 1) * (max over that finite set of the block bound).
+  Formalize via strong induction on the remaining skeleton budget (≤ locs.length),
+  carrying the invariant "the set of reachable block-entry envs is finite".
+
+  `h_witnesses` supplies, per self-loop edge, the Farkas witness feeding
+  `selfloop_run_bounded`; `h_upto` (via `skeleton_steps_bounded`) caps the block
+  count. -/
 lemma total_selfloop_steps_bounded
     {ip : IntegerProgram}
     (h_witnesses : ∀ t ∈ ip.selfLoops,
-        ∃ (n m : ℕ) (w : FarkasWitness n m) (h_self : t.src = t.tgt) (h_edge : t ∈ ip.edges),
+        ∃ (n m : ℕ) (w : LASW.FarkasWitness n m) (h_self : t.src = t.tgt) (h_edge : t ∈ ip.edges),
           w.RepresentsProgram (ip.transition_to_ip t h_self h_edge))
     (h_upto : ip.AcyclicUpToSelfLoops)
     (env : Env) :
     ∃ B : Nat, ∀ {u v : Nat} (p : SemanticPath ip env u v), p.selfLoopSteps ≤ B := by
   sorry
-
 
 /-! ## MAIN THEOREM — fully assembled -/
 

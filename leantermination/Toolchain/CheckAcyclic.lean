@@ -37,5 +37,5 @@ def main : IO Unit := do
     IO.println s!"------------------------------------------------------"
     IO.println (reprStr its)
     IO.println s!"------------------------------------------------------"
-    IO.println s!"The provided Integer Program is {(if IntegerProgram.IsAcyclic its then "acyclic, thus terminates" else "non-acyclic, thus termination cannot be proven.")}"
+    IO.println s!"The provided Integer Program is {(if IntegerProgram.isAcyclic its then "acyclic, thus terminates" else "non-acyclic, thus termination cannot be proven.")}"
   | none     => IO.println "Failed to parse ITS file"

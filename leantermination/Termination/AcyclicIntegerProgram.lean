@@ -2,8 +2,8 @@ import Mathlib.Data.List.Basic
 import Mathlib.Data.List.Nodup
 import Mathlib.Data.Finset.Basic
 import leantermination.Datastructures.IntegerProgram
-import leantermination
-
+import Mathlib.Data.Finset.Basic
+import Mathlib.Algebra.Polynomial.Basic
 
 -- Semantic Path to Syntactic Paths
 

@@ -60,8 +60,7 @@ inductive Constraint where
   deriving Repr, DecidableEq
 
 -- Derived Constraint, {¬, ∧} is functionally complete, thus if needed all boolean operators can be derived
-def Constraint.or (c1 c2 : Constraint) := Constraint.not
-(Constraint.and (Constraint.not c1 ) (Constraint.not c2))
+def Constraint.or (c1 c2 : Constraint) := Constraint.not (Constraint.and (Constraint.not c1 ) (Constraint.not c2))
 
 def Constraint.true := Constraint.not (Constraint.atom Cmp.lt (Expr.lit 0) (Expr.lit 0))
 def Constraint.false := Constraint.not Constraint.true
