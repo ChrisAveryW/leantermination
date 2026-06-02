@@ -5,40 +5,26 @@ import Mathlib.Logic.Function.Iterate
 
 open Function
 
-/-!
-# Acyclicity via a layering certificate
+-- this is the certificate, that determines if it is acyclic or not.
+/-
+Functionality:
+This is topological ordering: every location receives a level, every sucessor of a transition must
+have a greater level. If this holds it is acyclic. If it doesn't hold it isn't:
+layer of t.src < layer of t.tgt < layer of t.src <-> layer of t.src < layer of t.src -> contrad.
 
-This replaces the previous DFS-based `isAcyclic` with the *certifying checker*
-pattern:
-
-  * an (untrusted) oracle produces a layering `comp : Nat → Nat`;
-  * a small verified checker validates that `comp` strictly increases along
-    every edge;
-  * soundness (`checkAcyclic_sound`) proves that a passing certificate implies
-    `IntegerProgram.Acyclic`.
-
-Only **soundness** (`checker = true → Acyclic`) is needed for the toolchain to
-be correct: a `true` result is trustworthy; a `false` result merely means
-"could not certify". We therefore do **not** prove completeness — which removes
-the previous `sorry` in `isAcyclic_iff` and lets us delete the entire DFS.
-
-The oracle `computeLayering` is deliberately untrusted: a wrong `comp` can only
-ever make the checker *reject* (a completeness gap), never make it accept a
-cyclic program (a strictly-increasing layering cannot exist around a cycle).
+In this case: Layering can be anykind of function that fulfills this property, to be acyclic.
+But it is initialized with the max length from the initial location,
+as this is a correct strict topological order.
 -/
 
-/-- A layering certificate: a numbering of locations. Untrusted data. -/
 abbrev Layering := Nat → Nat
 
--- ============================================================
--- Verified checker + soundness  (the part that matters)
--- ============================================================
-
-/-- Checker for plain acyclicity: every edge strictly increases the layer. -/
+-- we use decide, since "<" is Prop.
+-- checks if the acyclic invariant is given for all edges
 def checkAcyclic (ip : IntegerProgram) (comp : Layering) : Bool :=
   ip.edges.all (fun t => decide (comp t.src < comp t.tgt))
 
-/-- Extract the per-edge fact from a passing certificate. -/
+-- this is the beginning of the proof, which formulates checkAcyclic as the Acyclic proof
 lemma checkAcyclic_edge {ip : IntegerProgram} {comp : Layering}
     (h : checkAcyclic ip comp = true) :
     ∀ t ∈ ip.edges, comp t.src < comp t.tgt := by
@@ -46,8 +32,7 @@ lemma checkAcyclic_edge {ip : IntegerProgram} {comp : Layering}
   have hb := (List.all_eq_true.mp h) t ht
   simpa using hb
 
-/-- Core invariant: along any syntactic path the layer grows by at least the
-length of the path. -/
+-- uses definition of syntactic path to form into usable equation
 lemma checkAcyclic_layer_mono {ip : IntegerProgram} {comp : Layering}
     (hedge : ∀ t ∈ ip.edges, comp t.src < comp t.tgt)
     {u v : Nat} (p : SyntacticPath ip u v) :
@@ -61,7 +46,7 @@ lemma checkAcyclic_layer_mono {ip : IntegerProgram} {comp : Layering}
       -- goal: comp t.src + (1 + p'.length) ≤ comp v ;  ih: comp t.tgt + p'.length ≤ comp v
       omega
 
-/-- **Soundness.** A passing layering certificate proves acyclicity. -/
+-- soundness of layer certificate proven
 theorem checkAcyclic_sound {ip : IntegerProgram} {comp : Layering}
     (h : checkAcyclic ip comp = true) : IntegerProgram.Acyclic ip := by
   unfold IntegerProgram.Acyclic
@@ -69,38 +54,27 @@ theorem checkAcyclic_sound {ip : IntegerProgram} {comp : Layering}
   have hmono := checkAcyclic_layer_mono (checkAcyclic_edge h) p  -- comp u + p.length ≤ comp u
   omega
 
--- ============================================================
--- Untrusted oracle (swappable; correctness NOT relied upon)
--- ============================================================
-
-/-!
-`computeLayering` is **not** verified. A longest-path relaxation: iterate
-`comp t.tgt := max (comp t.tgt) (comp t.src + 1)` over all edges `locs.length+1`
-times. For an acyclic program this converges to a strict layering; for a cyclic
-program some back-edge necessarily fails the checker.
-
-Swap this for Mathlib's `Mathlib.Tactic.Order.Graph.findSCCs` + a topological
-numbering, or any heuristic — soundness is unaffected. If it ever fails to
-compile in your toolchain, temporarily use `fun _ => 0` (which makes every check
-fail *safely*) until the real oracle is wired in.
--/
+-- computing the layering
+-- bellman-ford relaxation
 private def relaxOnce (edges : List Transition) (comp : Nat → Nat) : Nat → Nat :=
   edges.foldl
     (fun c t => Function.update c t.tgt (max (c t.tgt) (c t.src + 1)))
     comp
 
-def computeLayering (ip : IntegerProgram) : Layering :=
-  (relaxOnce ip.edges)^[ip.locs.length + 1] (fun _ => 0)
 
--- ============================================================
--- Toolchain Boolean API (names kept stable for CheckAcyclic.lean)
--- ============================================================
+-- relax max locations + 1 times
+def computeLayering (ip : IntegerProgram) : Layering := Id.run do
+  let mut comp : Nat → Nat := fun _ => 0
+  for _ in List.range (ip.locs.length + 1) do
+    comp := relaxOnce ip.edges comp
+  return comp
 
-/-- Boolean decision procedure used by the toolchain. -/
+-- function that can be called, to determine acyclicity
 def IntegerProgram.isAcyclic (ip : IntegerProgram) : Bool :=
   checkAcyclic ip (computeLayering ip)
 
-/-- Toolchain soundness: a `true` answer proves acyclicity. -/
+-- final soundness theorem
+-- this is not iff, it is oneway which should suffices for correctness but not completeness.
 theorem IntegerProgram.isAcyclic_sound {ip : IntegerProgram}
     (h : ip.isAcyclic = true) : IntegerProgram.Acyclic ip :=
   checkAcyclic_sound h

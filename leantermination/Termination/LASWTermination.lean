@@ -50,7 +50,6 @@ def delta : ℚ := -(∑ i, w.lambda₂ i * w.b i)
 lemma delta_pos : 0 < w.delta := by
   unfold delta
   exact neg_pos.mpr w.h_1d
-  -- TODO: unfold `delta`; use `h_1d`; `linarith`.
 
 
 end FarkasWitness
@@ -149,7 +148,6 @@ lemma decrease_on_step
     intro i
     rw [mul_add, Finset.mul_sum, Finset.mul_sum]
 
-  -- Apply h_dist termwise and split the outer sum
   have h_lhs_eq :
       (∑ i, w.lambda₂ i *
         ((∑ j, w.A i j * x j) + (∑ j, w.A' i j * x' j)))
@@ -159,8 +157,6 @@ lemma decrease_on_step
     apply Finset.sum_congr rfl
     intro i _
     exact h_dist i
-
-  -- Swap the order of summation in each double sum
   have h_swap_A :
       (∑ i, ∑ j, w.lambda₂ i * (w.A i j * x j))
       = ∑ j, (∑ i, w.lambda₂ i * w.A i j) * x j := by
@@ -188,9 +184,7 @@ lemma decrease_on_step
     intro j; rfl  -- w.r is defined as exactly this sum
 
   -- λ₂ A = -r, derived from h_1c
-  -- h_1c says: ∀ j, ∑ i, λ₂ i * (A i j + A' i j) = 0
-  -- which means: (λ₂ A)(j) + (λ₂ A')(j) = 0
-  -- hence:        (λ₂ A)(j) = -(λ₂ A')(j) = -r(j).
+  -- h_1c: ∀ j, ∑ i, λ₂ i * (A i j + A' i j) = 0
   have h_lam2A : ∀ j, (∑ i, w.lambda₂ i * w.A i j) = -w.r j := by
     intro j
     have := w.h_1c j
@@ -212,17 +206,7 @@ lemma decrease_on_step
       ((∑ j, w.A i j * x j) + (∑ j, w.A' i j * x' j)))
     = (∑ j, (-w.r j) * x j) + (∑ j, w.r j * x' j) := by
     rw [h_lhs_eq, h_swap_A, h_swap_A']
-  -- After this, the goal should be:
-  --   (∑ j, (∑ i, λ₂ i * A i j) * x j) + (∑ j, (∑ i, λ₂ i * A' i j) * x' j)
-  --   = (∑ j, (-w.r j) * x j) + (∑ j, w.r j * x' j)
-  -- Rewrite each inner sum using h_lam2A and h_lam2A':
     simp_rw [h_lam2A, h_lam2A']
-
-  -- ---- Step 5: rearrange to the goal ----
-  -- We now have:
-  --   (∑ j, -r j * x j) + (∑ j, r j * x' j) ≤ ∑ i, λ₂ i * b i
-  -- The RHS equals -δ by definition of δ.
-  -- Rearranging: ∑ r j * x' j ≤ ∑ r j * x j - δ.
 
   -- λ₂·b = -δ
   have h_rhs : (∑ i, w.lambda₂ i * w.b i) = -w.delta := by
@@ -241,11 +225,6 @@ lemma decrease_on_step
   rw [h_neg_sum, h_rhs] at h_sum
   -- h_sum is now:  -(∑ r j * x j) + (∑ r j * x' j) ≤ -δ
   linarith
-   -- TODO: follow the 5-step outline.
-        -- Key Mathlib lemmas to know:
-        --   * `Finset.mul_sum`, `Finset.sum_mul` (distributing)
-        --   * `Finset.sum_le_sum` (componentwise ≤ to sums)
-        --   * `mul_nonneg` (for `λ₂ i ≥ 0`)
 
 /--
 Any loop-eligible state `env` (one that admits a successor) satisfies
@@ -399,8 +378,6 @@ lemma bounded_on_loop_state
     ring
   rw [h_rhs] at h_zero
   -- h_zero : -(∑ j, r j * x j) ≤ -δ₀
-
-  -- Goal: δ₀ ≤ ∑ j, r j * x j.  This follows by linarith.
   linarith
 
 

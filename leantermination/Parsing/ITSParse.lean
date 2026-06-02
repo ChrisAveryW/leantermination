@@ -1,6 +1,7 @@
 import leantermination.Parsing.Preparse
 import leantermination.Datastructures.IntegerProgram
-import leantermination
+import Mathlib.Tactic.Tauto
+
 
 set_option linter.style.longLine false
 

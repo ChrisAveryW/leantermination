@@ -1,29 +1,12 @@
 import leantermination.Termination.Acyclic
 import leantermination.Termination.AcyclicUpToLinearLoops
 
-/-!
-# Acyclicity-up-to-self-loops via the same layering certificate
 
-`IntegerProgram.AcyclicUpToSelfLoops ip` is *defined* as
-`IntegerProgram.Acyclic ip.withoutSelfLoops`, so the checker is just the acyclic
-checker that tolerates self-loop edges: every edge must either be a self-loop
-(`src = tgt`) or strictly increase the layer.
-
-This file deliberately imports both `Acyclic` (for `checkAcyclic`,
-`checkAcyclic_sound`, `Layering`, `computeLayering`) and `AcyclicUpToLinearLoops`
-(for `withoutSelfLoops`, `selfLoops`, `AcyclicUpToSelfLoops`). No import cycle:
-`AcyclicUpToLinearLoops` does not import `Acyclic`.
--/
-
-/-- Checker: every edge is a self-loop or strictly increases the layer. -/
+-- same definition like in Acyclic.lean just slightly adapted to allow self loops
 def checkAcyclicUpToSelfLoops (ip : IntegerProgram) (comp : Layering) : Bool :=
   ip.edges.all (fun t => (t.src == t.tgt) || decide (comp t.src < comp t.tgt))
 
-/-- Membership in `withoutSelfLoops.edges` means: an edge that is not a self-loop.
-
-NOTE: the `simp only` set below mirrors the one already used and known to work
-in `IntegerProgram.withoutSelfLoops.h_edges`. If your Mathlib version reshapes
-the goal slightly, this single line is the only place that needs adjusting. -/
+-- same lemma only
 private lemma mem_withoutSelfLoops_edges
     {ip : IntegerProgram} {t : Transition}
     (ht : t ∈ ip.withoutSelfLoops.edges) : t ∈ ip.edges ∧ t.src ≠ t.tgt := by
@@ -32,7 +15,7 @@ private lemma mem_withoutSelfLoops_edges
     decide_eq_false_iff_not] at ht
   aesop
 
-/-- **Soundness.** A passing certificate proves acyclicity-up-to-self-loops. -/
+-- main soundness theorem
 theorem checkAcyclicUpToSelfLoops_sound
     {ip : IntegerProgram} {comp : Layering}
     (h : checkAcyclicUpToSelfLoops ip comp = true) :
@@ -52,15 +35,11 @@ theorem checkAcyclicUpToSelfLoops_sound
   · exact absurd heq ht_ne          -- not a self-loop, so this disjunct is impossible
   · simpa using hlt                 -- hence the layer strictly increases
 
--- ============================================================
--- Toolchain Boolean API (reuses the single oracle)
--- ============================================================
-
-/-- Boolean decision procedure for the toolchain. One oracle, read a second way. -/
+-- decision api, uses acyclic layering function
 def IntegerProgram.isAcyclicUpToSelfLoops (ip : IntegerProgram) : Bool :=
   checkAcyclicUpToSelfLoops ip (computeLayering ip)
 
-/-- Toolchain soundness. -/
+-- soundness, only one way completeness not given
 theorem IntegerProgram.isAcyclicUpToSelfLoops_sound {ip : IntegerProgram}
     (h : ip.isAcyclicUpToSelfLoops = true) :
     IntegerProgram.AcyclicUpToSelfLoops ip :=
