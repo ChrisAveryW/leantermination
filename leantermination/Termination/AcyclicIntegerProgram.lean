@@ -5,32 +5,46 @@ import leantermination.Datastructures.IntegerProgram
 import Mathlib.Data.Finset.Basic
 import Mathlib.Algebra.Polynomial.Basic
 
--- Semantic Path to Syntactic Paths
+/-
+Some helper lemmas about Paths.
+-/
 
-private lemma SemanticPath.exists_syntactic {u v : Nat} {env : Env} {ip : IntegerProgram}
-    (p : SemanticPath ip env u v) : Nonempty (SyntacticPath ip u v) :=
-  ⟨p.toSyntactic⟩
 
+/--
+This lemma shows that the function `SemanticPath.toSyntactic` preserves length.
+It works by induction over the two cases of a SemanticPath.
+-/
 private lemma SemanticPath.toSyntactic_length {ip : IntegerProgram} {env : Env} {u v : Nat}
     (p : SemanticPath ip env u v) : p.toSyntactic.length = p.length := by
   induction p with
   | nil _ _ _           => rfl
   | cons _ _ _ _ _ _ _ ih =>
-      simp [SemanticPath.toSyntactic, SyntacticPath.length, SemanticPath.length, ih]
+      simp only [SemanticPath.toSyntactic, SyntacticPath.length, SemanticPath.length, ih]
 
+/--
+This lemma just changes the interaction of the `SemanticPath.toSyntatctic_length` lemma.
+It doesn't introduce any new knowledge.
+-/
+private lemma SemanticPath.synatactic_length {ip : IntegerProgram} {env : Env} {u v : Nat}
+    (p : SemanticPath ip env u v)
+    (p' : SyntacticPath ip u v)
+    (h_eq : p.toSyntactic = p') :
+    p'.length = p.length := by
+  rw [← h_eq]
+  rw [SemanticPath.toSyntactic_length]
 
--- Helper functions and Lemma for
-
-def SyntacticPath.visited {ip : IntegerProgram} {u v : Nat} :
-    SyntacticPath ip u v → List Nat
-  | .nil u _    => [u]
-  | .cons t _ p => t.src :: p.visited
-
+/--
+This lemma proves that the length of `SyntacticPath` stands in a specific relation to the length
+of visited locations. The number of visited locations is always one more than the path length.
+This is because the path length is defined on the number of transitions.
+-/
 private lemma SyntacticPath.visited_length {ip : IntegerProgram} {u v : Nat}
     (p : SyntacticPath ip u v) : p.visited.length = p.length + 1 := by
   induction p with
-  | nil _ _       => simp [SyntacticPath.visited, SyntacticPath.length]
-  | cons _ _ _ ih => simp [SyntacticPath.visited, SyntacticPath.length, ih]; omega
+  | nil _ _       => simp only [visited, List.length_cons, List.length_nil, zero_add, length]
+  | cons _ _ _ ih =>
+    simp only [visited, List.length_cons, ih, length, Nat.add_right_cancel_iff]
+    omega
 
 private lemma SyntacticPath.visited_mem {ip : IntegerProgram} {u v : Nat}
     (p : SyntacticPath ip u v) : ∀ x ∈ p.visited, x ∈ ip.locs := by
@@ -38,7 +52,8 @@ private lemma SyntacticPath.visited_mem {ip : IntegerProgram} {u v : Nat}
   | nil u hu =>
       intro x hx
       simp only [visited, List.mem_cons, List.not_mem_nil, or_false] at hx
-      subst hx; exact hu
+      subst hx
+      exact hu
   | cons t ht _ ih =>
       intro x hx
       simp only [SyntacticPath.visited, List.mem_cons] at hx
@@ -66,7 +81,7 @@ private lemma SyntacticPath.visited_nodup {ip : IntegerProgram}
     (hac : IntegerProgram.Acyclic ip) {u v : Nat}
     (p : SyntacticPath ip u v) : p.visited.Nodup := by
   induction p with
-  | nil _ _ => exact List.nodup_singleton _
+  | nil u' _ => exact List.nodup_singleton u'
   | cons t ht q ih =>
       rw [SyntacticPath.visited, List.nodup_cons]
       refine ⟨?_, ih⟩
@@ -88,13 +103,15 @@ private lemma nodup_sublist_length {α : Type*} {l ref : List α}
     _                 ≤ ref.toFinset.card := Finset.card_le_card h2
     _                 ≤ ref.length        := List.toFinset_card_le ref
 
-theorem acyclic_impl_bounded_SyntacticPath {ip : IntegerProgram}
-    (hac : IntegerProgram.Acyclic ip) {u v : Nat} (p : SyntacticPath ip u v) :
+theorem acyclic_impl_bounded_SyntacticPath
+    {ip : IntegerProgram} {u v : Nat}
+    (h_acyc : IntegerProgram.Acyclic ip)
+    (p : SyntacticPath ip u v) :
     p.length < ip.locs.length := by
-  have hnd  := SyntacticPath.visited_nodup hac p
-  have hmem := SyntacticPath.visited_mem p
-  have hle  := nodup_sublist_length hnd hmem
-  rw [SyntacticPath.visited_length] at hle
+  have h_nodup  := SyntacticPath.visited_nodup h_acyc p
+  have h_mem := SyntacticPath.visited_mem p
+  have h_le  := nodup_sublist_length h_nodup h_mem
+  rw [SyntacticPath.visited_length] at h_le
   omega
 
 
@@ -106,7 +123,8 @@ theorem Acayclic_impl_Termination (ip : IntegerProgram) :
   intro e
   refine ⟨ip.locs.length, ?_⟩
   intro u v p
-  have h1 := SemanticPath.toSyntactic_length p
-  have h2 := acyclic_impl_bounded_SyntacticPath h_acyc p.toSyntactic
-  rw [SemanticPath.toSyntactic_length] at h2
+  let syntactic_path := p.toSyntactic
+  have h_eq : p.toSyntactic = syntactic_path := rfl
+  have h1 := acyclic_impl_bounded_SyntacticPath h_acyc syntactic_path
+  rw [SemanticPath.synatactic_length p syntactic_path h_eq] at h1
   omega
