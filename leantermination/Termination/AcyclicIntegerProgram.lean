@@ -5,10 +5,12 @@ import leantermination.Datastructures.IntegerProgram
 import Mathlib.Data.Finset.Basic
 import Mathlib.Algebra.Polynomial.Basic
 
+set_option linter.style.longLine false
+
+
 /-
 Some helper lemmas about Paths.
 -/
-
 
 /--
 This lemma shows that the function `SemanticPath.toSyntactic` preserves length.
@@ -23,7 +25,7 @@ private lemma SemanticPath.toSyntactic_length {ip : IntegerProgram} {env : Env} 
 
 /--
 This lemma just changes the interaction of the `SemanticPath.toSyntatctic_length` lemma.
-It doesn't introduce any new knowledge.
+It doesn't introduce any new knowledge, is more of making this lemma more convenient.
 -/
 private lemma SemanticPath.synatactic_length {ip : IntegerProgram} {env : Env} {u v : Nat}
     (p : SemanticPath ip env u v)
@@ -46,6 +48,10 @@ private lemma SyntacticPath.visited_length {ip : IntegerProgram} {u v : Nat}
     simp only [visited, List.length_cons, ih, length, Nat.add_right_cancel_iff]
     omega
 
+/--
+This lemma generalizes the `IntegerProgram.h_egdes` invariant to a paths visited locations.
+It works by going inductivley going through the construction of a path.
+-/
 private lemma SyntacticPath.visited_mem {ip : IntegerProgram} {u v : Nat}
     (p : SyntacticPath ip u v) : ∀ x ∈ p.visited, x ∈ ip.locs := by
   induction p with
@@ -57,11 +63,19 @@ private lemma SyntacticPath.visited_mem {ip : IntegerProgram} {u v : Nat}
   | cons t ht _ ih =>
       intro x hx
       simp only [SyntacticPath.visited, List.mem_cons] at hx
-      rcases hx with rfl | hx
-      · exact (ip.h_edges t ht).1
-      · exact ih x hx
+      cases hx with
+        | inl heq =>
+          subst heq
+          exact (ip.h_edges t ht).1
+        | inr hx =>
+          exact ih x hx
 
-private lemma SyntacticPath.visited_reachable {ip : IntegerProgram} {u v : Nat}
+
+/--
+This lemma serves as proof helper. It allows other proofs to obtain a (propositional) `SyntacticPath`
+which starts in the same location as the provided path and ends in some location which which is in the among the visited locations.
+-/
+private lemma SyntacticPath.visited_subpath {ip : IntegerProgram} {u v : Nat}
     (p : SyntacticPath ip u v) : ∀ x ∈ p.visited, Nonempty (SyntacticPath ip u x) := by
   induction p with
   | nil u hu =>
@@ -77,8 +91,31 @@ private lemma SyntacticPath.visited_reachable {ip : IntegerProgram} {u v : Nat}
       · obtain ⟨p'⟩ := ih x hx
         exact ⟨.cons t ht p'⟩
 
+
+/- adr
+This is one important milestone in the proof of Acyclicty → Termination.
+Therefore this section will be verbose.
+
+This lemma, shows that visited nodes of a `SyntacticPath` are unique, thus a non-duplicate list.
+Proof step by step:
+The proof deconstructs the constructors of `SyntacticPath` by induction.
+- The base-case is solved simply by the Std-Theorem, which says that singletons are non-duplicate
+(which they obiously are).
+- The recursive-case is solved through a contradiction:
+We can express the recursive case as
+t.src ∉ q.visited ∧ q.visited is non-duplicate. So splitting the the head and tail of the list parts
+The second part of the konjunction can be solved by the induction hypothesis.
+The first part has to be proven: for this we assume that t.src ∈ q.visited to create a contradiction
+Since this t.src ∈ q.visited there exists a path: SyntactcPath ip t.tgt t.src := p
+If we create the successor: SyntacticPath.cons t _ p => we receive SyntacticPath t.src t.src
+Since we created it with SyntacticPath.cons the length is at least ≥ 1, which contradicts t.src ∈ q.visited
+
+So in short, if we added a new transition t, then we can conclude that if it were source location
+was already in the path, then (since we add the transition with cons) there would be a real self loop from
+t.src to t.src resulting in the contradiction that it is acyclic!
+-/
 private lemma SyntacticPath.visited_nodup {ip : IntegerProgram}
-    (hac : IntegerProgram.Acyclic ip) {u v : Nat}
+    (h_acyc : IntegerProgram.Acyclic ip) {u v : Nat}
     (p : SyntacticPath ip u v) : p.visited.Nodup := by
   induction p with
   | nil u' _ => exact List.nodup_singleton u'
@@ -86,23 +123,40 @@ private lemma SyntacticPath.visited_nodup {ip : IntegerProgram}
       rw [SyntacticPath.visited, List.nodup_cons]
       refine ⟨?_, ih⟩
       intro hmem
-      obtain ⟨p'⟩ := q.visited_reachable _ hmem
-      have hcycle : (.cons t ht p' : SyntacticPath ip t.src t.src).length = 0 := hac _
+      obtain ⟨p'⟩ := q.visited_subpath _ hmem
+      have hcycle : (.cons t ht p' : SyntacticPath ip t.src t.src).length = 0 := h_acyc _
       simp only [SyntacticPath.length] at hcycle
       omega
 
+/- adr
+This lemma has two assumptions: it assumes a non-duplicate list and a subset/sublist relationship between the non-duplicate list and another reference list.
+Since the list is non-duplicate it can be seen as a finite set. This finite set can be seen as a subset to the reference list (which can have duplicates).
+Thus the non-duplicate subset/list has less-than or equal number of elements.
+-/
+
+/--
+This lemma is the calculation part of the proof Acyclic → Termination.
+It inferes from a non-duplicate list, that the length must be lessthan or equal to which it is a subset.
+-/
 private lemma nodup_sublist_length {α : Type*} {l ref : List α}
-    (hnd : l.Nodup) (hsub : ∀ x ∈ l, x ∈ ref) : l.length ≤ ref.length := by
+    (h_nd : l.Nodup) (h_sub : ∀ x ∈ l, x ∈ ref) : l.length ≤ ref.length := by
   classical
-  have h1 : l.length = l.toFinset.card := (List.toFinset_card_of_nodup hnd).symm
+  have h1 : l.length = l.toFinset.card := (List.toFinset_card_of_nodup h_nd).symm
   have h2 : l.toFinset ⊆ ref.toFinset := by
     intro x hx
     simp only [List.mem_toFinset] at *
-    exact hsub x hx
+    exact h_sub x hx
   exact calc l.length = l.toFinset.card   := h1
     _                 ≤ ref.toFinset.card := Finset.card_le_card h2
     _                 ≤ ref.length        := List.toFinset_card_le ref
 
+/--
+This theorem shows that acyclic `IntegerPrograms` are bound in their path length.
+It works by showing that paths of acyclic integer programs have non-duplicat visited locations,
+which are all out of the location universe of an integer program.
+Therefore we can use the lemma that shows the length of the visited locations is smaller or equal to the size of our location universe.
+Then we rewrite this result path length (from the visited locations size).
+-/
 theorem acyclic_impl_bounded_SyntacticPath
     {ip : IntegerProgram} {u v : Nat}
     (h_acyc : IntegerProgram.Acyclic ip)
@@ -115,7 +169,9 @@ theorem acyclic_impl_bounded_SyntacticPath
   omega
 
 
--- Main Acyclic theorem
+/--
+This lemma generalizes `acyclic_impl_bound_SyntacticPath` to show that all acyclic integer programs have bound paths, thus terminate.
+-/
 theorem Acayclic_impl_Termination (ip : IntegerProgram) :
     IntegerProgram.Acyclic ip → IntegerProgram.Termination ip := by
   intro h_acyc
@@ -123,7 +179,7 @@ theorem Acayclic_impl_Termination (ip : IntegerProgram) :
   intro e
   refine ⟨ip.locs.length, ?_⟩
   intro u v p
-  let syntactic_path := p.toSyntactic
+  let syntactic_path := p.toSyntactic -- introduced to make it more clear, could be collapsed
   have h_eq : p.toSyntactic = syntactic_path := rfl
   have h1 := acyclic_impl_bounded_SyntacticPath h_acyc syntactic_path
   rw [SemanticPath.synatactic_length p syntactic_path h_eq] at h1
