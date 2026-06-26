@@ -6,15 +6,21 @@ import Mathlib.Algebra.Order.Floor.Defs
 import Mathlib.Data.Rat.Floor
 import Mathlib.Algebra.Ring.Defs
 
+set_option linter.style.longLine false
+set_option linter.style.emptyLine false
 
 namespace LASW
 
 /--
- `n` is the number of program variables.
- `m` is the number of inequalities in the matrix encoding `(A A')(x, x') ≤ b`.
- `A`, `A'` are `m × n` matrices over `ℚ`.
- `b : Fin m → ℚ` is the right-hand side vector.
- `lambda₁`, `lambda₂` are nonnegative *row* vectors of length `m`.
+This is the structure of the paper "A Complete Method for the Synthesis of Linear Ranking Functions".
+
+`n` is the number of program variables
+`m` is the number of inequalities in the matrix encoding (A A')(x,x') ≤ b
+`A`, `A'` are m × n matrices over ℚ
+`b : Fin m → ℚ` is the right-hand side vector
+`lambda₁`, `lambda₂` are the nonnegative vectors
+
+`h_1a`, ..., `h_1d` are the conditions that need to hold inoder to ensure the representing integer program terminates.
 -/
 structure FarkasWitness (n m : ℕ) where
   A : Fin m → Fin n → ℚ
@@ -24,48 +30,56 @@ structure FarkasWitness (n m : ℕ) where
   lambda₂ : Fin m → ℚ
   h_nonneg₁ : ∀ i, 0 ≤ lambda₁ i
   h_nonneg₂ : ∀ i, 0 ≤ lambda₂ i
-  -- (1a)  λ₁ · A' = 0   (as a row vector of length n)
+  -- λ₁ · A' = 0
   h_1a : ∀ j : Fin n, ∑ i, lambda₁ i * A' i j = 0
-  -- (1b)  (λ₁ - λ₂) · A = 0
+  -- (λ₁ - λ₂) · A = 0
   h_1b : ∀ j : Fin n, ∑ i, (lambda₁ i - lambda₂ i) * A i j = 0
-  -- (1c)  λ₂ · (A + A') = 0
+  -- λ₂ · (A + A') = 0
   h_1c : ∀ j : Fin n, ∑ i, lambda₂ i * (A i j + A' i j) = 0
-  -- (1d)  λ₂ · b < 0
+  -- λ₂ · b < 0
   h_1d : ∑ i, lambda₂ i * b i < 0
 
 namespace FarkasWitness
 
+/- adr
+This fixes a variable for future definitions, which are provided from the paper.
+The functions are derived from the FarkasWitness, and formalized exactly like *Theorem 1* defines it in the paper.
+-/
 variable {n m : ℕ} (w : FarkasWitness n m)
 
-/-- Coefficients of the linear ranking function:  `r := λ₂ · A'`. -/
+/-- Coefficients of the linear ranking function:  r := λ₂ · A' -/
 def r (j : Fin n) : ℚ := ∑ i, w.lambda₂ i * w.A' i j
 
-/-- Lower bound constant:  `δ₀ := -(λ₁ · b)`. -/
+/-- Lower bound constant: δ₀ := -(λ₁ · b) -/
 def delta₀ : ℚ := -(∑ i, w.lambda₁ i * w.b i)
 
-/-- Strict decrease amount:  `δ := -(λ₂ · b)`. Positive by (1d). -/
+/-- Strict decrease amount: δ := -(λ₂ · b). Positivity closable directly by h_1d -/
 def delta : ℚ := -(∑ i, w.lambda₂ i * w.b i)
 
-/-- `δ > 0`, immediately from condition (1d). -/
+/-- The lemma that shows the positivity of `FarkasWitness.delta` (so δ > 0).
+It is proven directly through (1d).
+-/
 lemma delta_pos : 0 < w.delta := by
   unfold delta
   exact neg_pos.mpr w.h_1d
 
-
 end FarkasWitness
 
-
 /--
-Convert an `Env` (a `List Int`) into a rational vector of length `n`.
-Indices past the list default to 0.
+Converts an `Env` into a rational vector of length n.
+Indices past the list default to 0, better than Option since this would bload the Option handeling.
+And could be considered as safe, since non-written values wouldn't have any other sensible default.
 -/
 def Env.toVec (n : ℕ) (env : Env) : Fin n → ℚ :=
-  fun i => (env.vars[i.val]?).map (fun z => (z : ℚ)) |>.getD 0
+  fun i =>
+    match env.vars[i.val]? with
+    | some z => (z : ℚ)
+    | none   => 0
 
 /--
-A single semantic step: there is an edge `t` of `ip` such that its guard
-holds at `env` and its update yields `env'`. Extracted from `SemanticPath.cons`
-for cleaner reasoning.
+This is a single semantic path step formalized as proposition.
+It breaks down something equivalent to a semantic path into a smaller piece that you can work with.
+This is important since in this case we reason more about single transitions than about longer paths!
 -/
 def SemanticStep (ip : IntegerProgram) (env env' : Env) : Prop :=
   ∃ t ∈ ip.edges,
@@ -73,9 +87,8 @@ def SemanticStep (ip : IntegerProgram) (env env' : Env) : Prop :=
     Update.all t.update env = some env'
 
 /--
-Encoding correctness for a single transition: whenever `t` performs a step
-from `env` to `env'`, the matrix inequality `(A A')(env, env')ᵀ ≤ b` holds.
-
+Encoding correctness for a single transition.
+Whenever t performs a step from env to env', the matrix inequality (A A')(env, env')ᵀ ≤ b holds.
 -/
 def FarkasWitness.RepresentsTransition
     {n m : ℕ} (w : FarkasWitness n m) (t : Transition) : Prop :=
@@ -86,14 +99,15 @@ def FarkasWitness.RepresentsTransition
       (∑ j, w.A i j * Env.toVec n env j) +
       (∑ j, w.A' i j * Env.toVec n env' j) ≤ w.b i
 
-/-- For a whole program: the witness must represent every edge. -/
+/--
+This is the generalization of the statement `FarkasWitness.RepresentsTransition` to a complete integer program.
+-/
 def FarkasWitness.RepresentsProgram
     {n m : ℕ} (w : FarkasWitness n m) (ip : IntegerProgram) : Prop :=
   ∀ t ∈ ip.edges, w.RepresentsTransition t
 
 /--
 A single semantic step implies the matrix inequality.
-
 -/
 lemma step_implies_matrix
     {n m : ℕ} {ip : IntegerProgram} {w : FarkasWitness n m}
@@ -102,21 +116,31 @@ lemma step_implies_matrix
     ∀ i : Fin m,
       (∑ j, w.A i j * Env.toVec n env j) +
       (∑ j, w.A' i j * Env.toVec n env' j) ≤ w.b i := by
-  -- Unpack h_step: get the transition t, the fact it's an edge,
-  -- the guard, and the update.
   obtain ⟨t, h_edge, hguard, hupdate⟩ := h_step
-  -- h_repr applied to t gives us RepresentsTransition for that specific t.
   have h_repr_t : w.RepresentsTransition t := h_repr t h_edge
-  -- RepresentsTransition is itself a ∀-statement; apply it.
   intro i
   exact h_repr_t env env' hguard hupdate i
 
+/--
+Dedicated helper/convenience lemma which defeats the purpose for having to show this in
+`decrease_on_step` and `bounded_on_loop_state` seperatly.
+-/
+private lemma sum_sum_swap_mul [Fintype ι] [Fintype κ] [CommSemiring R]
+    (lam : ι → R) (M : ι → κ → R) (x : κ → R) :
+    (∑ i, ∑ j, lam i * (M i j * x j))
+      = ∑ j, (∑ i, lam i * M i j) * x j := by
+  rw [Finset.sum_comm]
+  apply Finset.sum_congr rfl
+  intro j _
+  rw [Finset.sum_mul]
+  apply Finset.sum_congr rfl
+  intro i _
+  ring
 
 /--
-Decrease Lemma
-
-The linear function `r · x` strictly decreases by at least `δ` on every step:
-  `r · env' ≤ r · env - δ`.
+This is the strict decrease lemma:
+The linear function r·x strictly decreases by at least δ on every step.
+Thus this statement is ultimately shown: r · env' ≤ r · env - δ
 -/
 lemma decrease_on_step
     {n m : ℕ} {ip : IntegerProgram} {w : FarkasWitness n m}
@@ -124,14 +148,14 @@ lemma decrease_on_step
     {env env' : Env} (h_step : SemanticStep ip env env') :
     (∑ j, w.r j * Env.toVec n env' j) ≤
     (∑ j, w.r j * Env.toVec n env j) - w.delta := by
+  -- creates both the variable representation of the paper
   set x  : Fin n → ℚ := Env.toVec n env  with hx
   set x' : Fin n → ℚ := Env.toVec n env' with hx'
-
+  -- unfold matrix representation
   have h_mat : ∀ i : Fin m,
       (∑ j, w.A i j * x j) + (∑ j, w.A' i j * x' j) ≤ w.b i :=
     step_implies_matrix h_repr h_step
-
-  -- Multiply row i by λ₂(i) ≥ 0 and sum.
+  -- Multiply row i by λ₂(i) ≥ 0 and exapnd summation
   have h_sum :
       (∑ i, w.lambda₂ i *
         ((∑ j, w.A i j * x j) + (∑ j, w.A' i j * x' j)))
@@ -139,7 +163,6 @@ lemma decrease_on_step
     apply Finset.sum_le_sum
     intro i _
     exact mul_le_mul_of_nonneg_left (h_mat i) (w.h_nonneg₂ i)
-
   -- distribute λ₂(i) over the inner addition:
   have h_dist : ∀ i,
       w.lambda₂ i * ((∑ j, w.A i j * x j) + (∑ j, w.A' i j * x' j))
@@ -157,27 +180,9 @@ lemma decrease_on_step
     apply Finset.sum_congr rfl
     intro i _
     exact h_dist i
-  have h_swap_A :
-      (∑ i, ∑ j, w.lambda₂ i * (w.A i j * x j))
-      = ∑ j, (∑ i, w.lambda₂ i * w.A i j) * x j := by
-    rw [Finset.sum_comm]
-    apply Finset.sum_congr rfl
-    intro j _
-    rw [Finset.sum_mul]
-    apply Finset.sum_congr rfl
-    intro i _
-    ring
 
-  have h_swap_A' :
-      (∑ i, ∑ j, w.lambda₂ i * (w.A' i j * x' j))
-      = ∑ j, (∑ i, w.lambda₂ i * w.A' i j) * x' j := by
-    rw [Finset.sum_comm]
-    apply Finset.sum_congr rfl
-    intro j _
-    rw [Finset.sum_mul]
-    apply Finset.sum_congr rfl
-    intro i _
-    ring
+  have h_swap_A := sum_sum_swap_mul w.lambda₂ w.A x
+  have h_swap_A' := sum_sum_swap_mul w.lambda₂ w.A' x'
 
   -- λ₂ A' = r by definition of r
   have h_lam2A' : ∀ j, (∑ i, w.lambda₂ i * w.A' i j) = w.r j := by
@@ -278,27 +283,9 @@ lemma bounded_on_loop_state
       simpa [h_lhs_eq] using h_sum
 
   -- apply that 1a
-  have h_swap_A :
-      (∑ i, ∑ j, w.lambda₁ i * (w.A i j * x j))
-      = ∑ j, (∑ i, w.lambda₁ i * w.A i j) * x j := by
-    rw [Finset.sum_comm]
-    apply Finset.sum_congr rfl
-    intro j _
-    rw [Finset.sum_mul]
-    apply Finset.sum_congr rfl
-    intro i _
-    ring
 
-  have h_swap_A' :
-      (∑ i, ∑ j, w.lambda₁ i * (w.A' i j * x' j))
-      = ∑ j, (∑ i, w.lambda₁ i * w.A' i j) * x' j := by
-    rw [Finset.sum_comm]
-    apply Finset.sum_congr rfl
-    intro j _
-    rw [Finset.sum_mul]
-    apply Finset.sum_congr rfl
-    intro i _
-    ring
+  have h_swap_A := sum_sum_swap_mul w.lambda₁ w.A x
+  have h_swap_A' := sum_sum_swap_mul w.lambda₁ w.A' x'
 
   have h_zero :
       (∑ i, ∑ j, w.lambda₁ i * (w.A i j * x j))
@@ -392,8 +379,16 @@ noncomputable def FarkasWitness.rho
   else
     w.delta₀ - w.delta
 
-/-
-ρ strictly decreases by `δ` on every step.
+/- adr
+This lemma shows that ρ strictly decreases by at least δ on every step.
+This can be transformed into the statement ρ(x') ≤ ρ(x) - δ, which shows this property.
+It works whith splitting into two cases:
+Case 1: x' has a successor
+Then ρ(x') = r·x', this can be resolved by `decrease_on_step` since it solves exactly rx' ≤ rx - δ
+Case 2: x' has no succesor
+Then ρ(x') = δ₀ - δ, which means δ₀ - δ ≤ rx - δ
+Which is equivalent to: δ₀ ≤ rx which can be solved by `bounded_on_loop_state`
+With calculation: (ρ(x) ≥ δ₀ - δ ⇒ rx ≥ δ₀ - δ ⇒ rx ≥ δ₀).
 -/
 lemma rho_strict_decrease
     {n m : ℕ} {ip : IntegerProgram} {w : FarkasWitness n m}
@@ -420,8 +415,16 @@ lemma rho_strict_decrease
       bounded_on_loop_state h_repr env h_env_loop
     linarith
 
-/--
-ρ is bounded below by `δ₀ - δ` on every state.
+/- adr
+This lemma proves ρ is bounded below by δ₀ - δ on every state.
+It can be transformed into the statement ρ(x) ≥ δ₀ - δ.
+It works again with splitting into two cases:
+Case 1: x has a successor
+Since we have a successor ρ(x) = rx, we want to show rx ≥ δ₀ - δ
+`bounded_on_loop_state` gives us rx ≥ δ₀ => rx ≥ δ₀ - δ (since δ > 0)
+Case 2: x has no successor
+This is trivial since ρ(x) = δ₀ - δ.
+
 -/
 lemma rho_lower_bound
     {n m : ℕ} {ip : IntegerProgram} {w : FarkasWitness n m}
@@ -430,44 +433,71 @@ lemma rho_lower_bound
     w.delta₀ - w.delta ≤ w.rho ip env := by
   unfold FarkasWitness.rho
   by_cases h_env: ∃ e', SemanticStep ip env e'
-  · -- Case eligable
-    rw [if_pos h_env]
+  · rw [if_pos h_env]
     have h_bound : w.delta₀ ≤ ∑ j, w.r j * Env.toVec n env j :=
       bounded_on_loop_state h_repr env h_env
     have h_mec : w.delta₀ ≤ ∑ j, w.r j * Env.toVec n env j + w.delta :=
       le_trans h_bound (le_add_of_nonneg_right (le_of_lt w.delta_pos))
     simpa
-  · -- trivial case
-    rw [if_neg h_env]
+  · rw [if_neg h_env]
 
 
-/--
-This lemma is reusable for any ranking-function-based termination method.
+
+
+/- adr
+This lemma shows us that a well-definied ranking functions (strict decrease, lower bound) result in bound SemanticPaths.
+For this proof we need as setup:
+- the ranking funciton: ρ
+- the lower bound: L which is ℚ
+- the value of minimum decrease: δ which is ℚ
+- the statement of decrease: h_decrease
+ -> it tells us that if there is a SemanticStep then the resulting value of the ranking function is at least smaller than the previous value minus δ
+- a path, which length we want to have bound: p
+
+And the statement we prove: p.length · δ ≤ ρ(env) - L
+Is derived from: ρ(env_start)-ρ(final_env) ≥ p.length · δ
+Since the lower bound L: ρ(final_env) ≥ L you can simplyfiy to: ρ(env) - L ≥ p.length · δ
+The next lemma: `path_length_le_bound` shows why this makes it bound, but conceptionally we receive: p.length ≤ (ρ(env) - L) / δ, which is exactly our searched n ∈ ℕ.
+
+The proof outline by induction over the SemanticPath:
+- The base-case has length zero, thus we have 0 ≤ ρ(env) - L, which is closed by h_bound.
+- The recursive case:
+Out of the Paths recursive information, we can construct a SemanticStep.
+With h_decrease, we can infere that this step decreases as wanted.
+And then prove the statement by calculating this equation:
+(1 + p'.length) · δ
+= δ + p'.length · δ
+≤ δ + (p(env') - L)
+≤ δ + (ρ(env) - δ) - L
+= ρ(env) - L
 -/
 lemma path_length_bounded_by_ranking
     (ip : IntegerProgram)
-    (ρ : Env → ℚ) (L δ : ℚ) (hδ : 0 < δ)
+    (ρ : Env → ℚ) (L δ : ℚ)
     (h_bound : ∀ env, L ≤ ρ env)
     (h_decrease : ∀ env env', SemanticStep ip env env' → ρ env' ≤ ρ env - δ)
     {env : Env} {u v : Nat} (p : SemanticPath ip env u v) :
     (p.length : ℚ) * δ ≤ ρ env - L := by
   induction p with
   | nil u env h =>
-    simp only [SemanticPath.length, Nat.cast_zero, zero_mul, sub_nonneg]
+    rw [SemanticPath.length, Nat.cast_zero, zero_mul, sub_nonneg]
     exact h_bound env
   | cons env t h_edge hguard env' hupdate p' ih =>
-      have h_step : SemanticStep ip env env' :=
-        ⟨t, h_edge, hguard, hupdate⟩
-      have h_dec : ρ env' ≤ ρ env - δ := h_decrease env env' h_step
-      -- ih : (p'.length : ℚ) * δ ≤ ρ env' - L
-      simp only [SemanticPath.length, Nat.cast_add, Nat.cast_one, ge_iff_le]
-      -- goal: (1 + p'.length) * δ ≤ ρ env - L  (after Nat.cast push)
-      -- ring/linarith time
-      have : ((1 + p'.length : ℕ) : ℚ) * δ = δ + (p'.length : ℚ) * δ := by push_cast; ring
-      linarith [ih, h_dec]
+    have h_step : SemanticStep ip env env' :=
+      ⟨t, h_edge, hguard, hupdate⟩
+    have h_dec : ρ env' ≤ ρ env - δ := h_decrease env env' h_step
+    rw [SemanticPath.length]
+    have h_fin : ((1 + p'.length : ℕ) : ℚ) * δ = δ + (p'.length : ℚ) * δ := by
+      push_cast
+      ring
+    linarith [ih, h_dec]
 
-/--
-the path length as a natural number is bounded.
+/- adr
+This lemma generalizes the results of `path_length_bounded_by_ranking` to create an existential statement.
+Since we proved: p.length · δ  ≤ ρ(env) - L, we can create the witness: p.length ≤ (ρ(env) - L) / δ (roundend up)
+Implementation:
+We receive the result by providing all the necessary evidence to the previous lemma.
+Then we devide we recreate the witness by deviding δ (h_div) and then ceil it, which already proves the goal.
 -/
 lemma path_length_le_bound
     (ip : IntegerProgram)
@@ -475,24 +505,17 @@ lemma path_length_le_bound
     (h_bound : ∀ env, L ≤ ρ env)
     (h_decrease : ∀ env env', SemanticStep ip env env' → ρ env' ≤ ρ env - δ)
     (env : Env) :
-    ∃ N : Nat, ∀ {u v : Nat} (p : SemanticPath ip env u v), p.length ≤ N := by
-      -- Pick N := ⌈(ρ env - L) / δ⌉₊
-  refine ⟨⌈(ρ env - L) / δ⌉₊, ?_⟩
+    ∃ n : Nat, ∀ {u v : Nat} (p : SemanticPath ip env u v), p.length ≤ n := by
+  use ⌈(ρ env - L) / δ⌉₊
   intro u v p
-  -- Get the raw rational bound
-  have h_raw : (p.length : ℚ) * δ ≤ ρ env - L :=
-    path_length_bounded_by_ranking ip ρ L δ hδ h_bound h_decrease p
-  -- Divide by δ > 0
+  have h_rank : (p.length : ℚ) * δ ≤ ρ env - L :=
+    path_length_bounded_by_ranking ip ρ L δ h_bound h_decrease p
   have h_div : (p.length : ℚ) ≤ (ρ env - L) / δ := by
     rw [le_div_iff₀ hδ]
-    exact h_raw
-  -- Cast through Nat.ceil
-  have : (p.length : ℚ) ≤ (⌈(ρ env - L) / δ⌉₊ : ℚ) :=
+    exact h_rank
+  have ceil : (p.length : ℚ) ≤ (⌈(ρ env - L) / δ⌉₊ : ℚ) :=
     le_trans h_div (Nat.le_ceil _)
-  exact_mod_cast this
-
-
-
+  exact_mod_cast ceil
 
 /--
 If a Farkas witness `w` represents `ip`, then `ip` terminates.
@@ -502,12 +525,14 @@ theorem termination_of_farkas_witness
     (w : FarkasWitness n m) (h_repr : w.RepresentsProgram ip) :
     ip.Termination := by
   intro env
-  -- Apply Layer 5 with ρ := w.rho ip, L := δ₀ - δ, δ := w.delta.
-  exact path_length_le_bound ip (w.rho ip) (w.delta₀ - w.delta) w.delta
+  exact path_length_le_bound
+    ip
+    (w.rho ip)
+    (w.delta₀ - w.delta)
+    w.delta
     w.delta_pos
     (rho_lower_bound h_repr)
     (fun _ _ h => rho_strict_decrease h_repr h)
     env
-
 
 end LASW

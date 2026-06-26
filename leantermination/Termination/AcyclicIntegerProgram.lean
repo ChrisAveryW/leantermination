@@ -177,7 +177,7 @@ theorem Acayclic_impl_Termination (ip : IntegerProgram) :
   intro h_acyc
   unfold IntegerProgram.Termination
   intro e
-  refine ⟨ip.locs.length, ?_⟩
+  use ip.locs.length
   intro u v p
   let syntactic_path := p.toSyntactic -- introduced to make it more clear, could be collapsed
   have h_eq : p.toSyntactic = syntactic_path := rfl
